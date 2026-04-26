@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transpose One Octave Down</title>
+  <style>
+    :root {
+      --stone-50: #fafaf9;
+      --stone-100: #f5f5f4;
+      --stone-200: #e7e5e4;
+      --stone-300: #d6d3d1;
+      --stone-500: #78716c;
+      --stone-600: #57534e;
+      --stone-700: #44403c;
+      --stone-800: #292524;
+      --stone-950: #0c0a09;
+      --green: #15803d;
+      --red: #b91c1c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--stone-50);
+      color: var(--stone-950);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid var(--stone-200);
+      border-radius: 18px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+    }
+
+    header {
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin: 10px 0 0;
+      color: var(--stone-700);
+      font-size: 1rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      min-width: 280px;
+    }
+
+    .stat {
+      background: var(--stone-50);
+      border: 1px solid var(--stone-200);
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--stone-500);
+      margin-bottom: 3px;
+    }
+
+    .stat-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+
+    main {
+      padding: 22px;
+    }
+
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .eyebrow {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--stone-500);
+    }
+
+    .task-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--stone-300);
+      background: white;
+      color: var(--stone-950);
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--stone-100);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      background: var(--stone-950);
+      color: white;
+      border-color: var(--stone-950);
+    }
+
+    .primary:hover:not(:disabled) {
+      background: var(--stone-800);
+    }
+
+    .svg-wrap {
+      border: 1px solid var(--stone-200);
+      border-radius: 14px;
+      overflow: hidden;
+      background: white;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .feedback-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 18px;
+    }
+
+    .feedback-box {
+      min-height: 58px;
+      border: 1px solid var(--stone-200);
+      background: var(--stone-50);
+      border-radius: 14px;
+      padding: 16px;
+      color: var(--stone-700);
+      display: flex;
+      align-items: center;
+    }
+
+    .feedback-correct {
+      color: var(--green);
+      font-weight: 800;
+      font-size: 1.15rem;
+    }
+
+    .feedback-incorrect {
+      color: var(--red);
+      font-weight: 800;
+      font-size: 1.15rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .footer-note {
+      margin-top: 14px;
+      color: var(--stone-600);
+      font-size: 0.88rem;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 12px;
+      }
+
+      header, main {
+        padding: 16px;
+      }
+
+      .stats {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .feedback-row {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        justify-content: stretch;
+      }
+
+      .actions button {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="card">
+      <div class="header-row">
+        <div>
+          <h1>Transpose One Octave Down</h1>
+          <p class="subtitle">Read the note in the treble clef. Place the matching note one octave lower in the bass clef.</p>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Score</div>
+            <div class="stat-value" id="score">0/0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Accuracy</div>
+            <div class="stat-value" id="accuracy">0%</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Streak</div>
+            <div class="stat-value" id="streak">0</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="card">
+      <div class="top-row">
+        <div>
+          <div class="eyebrow">Current question</div>
+          <div class="task-title">Transpose the treble note down one octave.</div>
+        </div>
+        <button id="resetBtn">Reset score</button>
+      </div>
+
+      <div class="svg-wrap">
+        <svg id="musicSvg" viewBox="0 0 720 380" aria-label="Grand staff transposition quiz">
+          <rect x="0" y="0" width="720" height="380" fill="white"></rect>
+
+          <g id="trebleStaff"></g>
+          <g id="bassStaff"></g>
+
+          <text x="116" y="119" font-size="104" font-family="serif" dominant-baseline="middle">𝄞</text>
+          <text x="112" y="260" font-size="81" font-family="serif" dominant-baseline="middle">𝄢</text>
+
+          <g id="questionNote" transform="translate(245 0)"></g>
+
+          <rect
+            id="answerHitbox"
+            x="193"
+            y="198"
+            width="104"
+            height="154"
+            fill="transparent"
+          ></rect>
+
+          <g id="answerLayer"></g>
+        </svg>
+      </div>
+
+      <div class="feedback-row">
+        <div class="feedback-box" id="feedbackBox">Hover over the bass clef stave, then click or tap to lock your note.</div>
+        <div class="actions">
+          <button id="unlockBtn" disabled>Unlock</button>
+          <button class="primary" id="confirmBtn" disabled>Confirm</button>
+        </div>
+      </div>
+
+      <div class="footer-note" id="footerNote">
+        Quiz range: treble C4–C5. Answer range: bass C3–C4. Natural notes only. Bass answer steps: C3–C4 = 3–10. Best streak: 0.
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const STAFF_LEFT = 96;
+    const STAFF_RIGHT = 440;
+    const LINE_GAP = 14;
+    const TREBLE_TOP = 78;
+    const BASS_TOP = 226;
+    const NOTE_RX = 12;
+    const NOTE_RY = 8;
+    const QUESTION_X = 245;
+
+    const trebleNotes = [
+      { letter: "C", octave: 4, step: -2 },
+      { letter: "D", octave: 4, step: -1 },
+      { letter: "E", octave: 4, step: 0 },
+      { letter: "F", octave: 4, step: 1 },
+      { letter: "G", octave: 4, step: 2 },
+      { letter: "A", octave: 4, step: 3 },
+      { letter: "B", octave: 4, step: 4 },
+      { letter: "C", octave: 5, step: 5 },
+    ];
+
+    const bassAnswerNotes = [
+      { letter: "C", octave: 3, step: 3 },
+      { letter: "D", octave: 3, step: 4 },
+      { letter: "E", octave: 3, step: 5 },
+      { letter: "F", octave: 3, step: 6 },
+      { letter: "G", octave: 3, step: 7 },
+      { letter: "A", octave: 3, step: 8 },
+      { letter: "B", octave: 3, step: 9 },
+      { letter: "C", octave: 4, step: 10 },
+    ];
+
+    let questionIndex = randomQuestion();
+    let hoverStep = null;
+    let lockedStep = null;
+    let feedback = null;
+    let correct = 0;
+    let attempted = 0;
+    let streak = 0;
+    let bestStreak = 0;
+    let timer = null;
+
+    const svg = document.getElementById("musicSvg");
+    const trebleStaff = document.getElementById("trebleStaff");
+    const bassStaff = document.getElementById("bassStaff");
+    const questionNote = document.getElementById("questionNote");
+    const answerHitbox = document.getElementById("answerHitbox");
+    const answerLayer = document.getElementById("answerLayer");
+    const scoreEl = document.getElementById("score");
+    const accuracyEl = document.getElementById("accuracy");
+    const streakEl = document.getElementById("streak");
+    const feedbackBox = document.getElementById("feedbackBox");
+    const unlockBtn = document.getElementById("unlockBtn");
+    const confirmBtn = document.getElementById("confirmBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const footerNote = document.getElementById("footerNote");
+
+    function svgEl(name, attrs = {}) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+      return el;
+    }
+
+    function noteName(note) {
+      return `${note.letter}${note.octave}`;
+    }
+
+    function yForStep(top, step) {
+      const bottomLineY = top + LINE_GAP * 4;
+      return bottomLineY - step * (LINE_GAP / 2);
+    }
+
+    function stepFromPointerY(y, top) {
+      const bottomLineY = top + LINE_GAP * 4;
+      return Math.round((bottomLineY - y) / (LINE_GAP / 2));
+    }
+
+    function clampStep(step) {
+      return Math.max(3, Math.min(10, step));
+    }
+
+    function randomQuestion(previousIndex = null) {
+      let next = Math.floor(Math.random() * trebleNotes.length);
+      if (trebleNotes.length > 1) {
+        while (next === previousIndex) next = Math.floor(Math.random() * trebleNotes.length);
+      }
+      return next;
+    }
+
+    function drawStaff(group, top) {
+      group.innerHTML = "";
+      for (let i = 0; i < 5; i++) {
+        group.appendChild(svgEl("line", {
+          x1: STAFF_LEFT,
+          x2: STAFF_RIGHT,
+          y1: top + i * LINE_GAP,
+          y2: top + i * LINE_GAP,
+          stroke: "currentColor",
+          "stroke-width": "1.5"
+        }));
+      }
+
+      group.appendChild(svgEl("line", {
+        x1: STAFF_RIGHT,
+        x2: STAFF_RIGHT,
+        y1: top,
+        y2: top + LINE_GAP * 4,
+        stroke: "currentColor",
+        "stroke-width": "1.5"
+      }));
+    }
+
+    function ledgerLines(parent, x, step, clef) {
+      const lineYs = [];
+      if (clef === "treble" && step <= -2) {
+        lineYs.push(yForStep(TREBLE_TOP, -2));
+      }
+      if (clef === "bass" && step >= 10) {
+        lineYs.push(yForStep(BASS_TOP, 10));
+      }
+
+      lineYs.forEach((lineY) => {
+        parent.appendChild(svgEl("line", {
+          x1: x - 19,
+          x2: x + 19,
+          y1: lineY,
+          y2: lineY,
+          stroke: "currentColor",
+          "stroke-width": "1.5",
+          "pointer-events": "none"
+        }));
+      });
+    }
+
+    function noteHead(parent, x, y, filled = true, colour = "currentColor", opacity = 1) {
+      parent.appendChild(svgEl("ellipse", {
+        cx: x,
+        cy: y,
+        rx: NOTE_RX,
+        ry: NOTE_RY,
+        transform: `rotate(-18 ${x} ${y})`,
+        fill: filled ? colour : "transparent",
+        stroke: colour,
+        "stroke-width": "2",
+        opacity: opacity,
+        "pointer-events": "none"
+      }));
+    }
+
+    function pointerToSvg(evt) {
+      const point = svg.createSVGPoint();
+      point.x = evt.clientX;
+      point.y = evt.clientY;
+      const svgPoint = point.matrixTransform(svg.getScreenCTM().inverse());
+      return svgPoint.y;
+    }
+
+    function lockedNote() {
+      if (lockedStep === null) return null;
+      return bassAnswerNotes.find((note) => note.step === lockedStep);
+    }
+
+    function updateStats() {
+      const percent = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+      scoreEl.textContent = `${correct}/${attempted}`;
+      accuracyEl.textContent = `${percent}%`;
+      streakEl.textContent = streak;
+      footerNote.textContent = `Quiz range: treble C4–C5. Answer range: bass C3–C4. Natural notes only. Bass answer steps: C3–C4 = 3–10. Best streak: ${bestStreak}.`;
+    }
+
+    function drawQuestion() {
+      questionNote.innerHTML = "";
+      const question = trebleNotes[questionIndex];
+      ledgerLines(questionNote, 0, question.step, "treble");
+      noteHead(questionNote, 0, yForStep(TREBLE_TOP, question.step), true);
+    }
+
+    function drawAnswer() {
+      answerLayer.innerHTML = "";
+      const answer = bassAnswerNotes[questionIndex];
+      const activeStep = lockedStep ?? hoverStep;
+
+      if (feedback === "incorrect" && lockedStep !== null) {
+        const wrongGroup = svgEl("g", { transform: `translate(${QUESTION_X} 0)`, color: "#b91c1c" });
+        ledgerLines(wrongGroup, 0, lockedStep, "bass");
+        noteHead(wrongGroup, 0, yForStep(BASS_TOP, lockedStep), true, "#b91c1c");
+        answerLayer.appendChild(wrongGroup);
+
+        const correctGroup = svgEl("g", { transform: `translate(${QUESTION_X + 70} 0)`, color: "#15803d" });
+        ledgerLines(correctGroup, 0, answer.step, "bass");
+        noteHead(correctGroup, 0, yForStep(BASS_TOP, answer.step), true, "#15803d");
+
+        const label = svgEl("text", {
+          x: 0,
+          y: yForStep(BASS_TOP, answer.step) - 22,
+          "text-anchor": "middle",
+          "font-size": "14",
+          fill: "#15803d",
+          "font-weight": "600"
+        });
+        label.textContent = "correct";
+        correctGroup.appendChild(label);
+        answerLayer.appendChild(correctGroup);
+        return;
+      }
+
+      if (feedback === "correct" && lockedStep !== null) {
+        const group = svgEl("g", { transform: `translate(${QUESTION_X} 0)`, color: "#15803d" });
+        ledgerLines(group, 0, lockedStep, "bass");
+        noteHead(group, 0, yForStep(BASS_TOP, lockedStep), true, "#15803d");
+        answerLayer.appendChild(group);
+        return;
+      }
+
+      if (activeStep !== null) {
+        const group = svgEl("g", { transform: `translate(${QUESTION_X} 0)` });
+        ledgerLines(group, 0, activeStep, "bass");
+        noteHead(group, 0, yForStep(BASS_TOP, activeStep), lockedStep !== null, "currentColor", lockedStep === null ? 0.55 : 1);
+        answerLayer.appendChild(group);
+      }
+    }
+
+    function updateFeedback() {
+      confirmBtn.disabled = feedback !== null || lockedStep === null;
+      unlockBtn.disabled = feedback !== null || lockedStep === null;
+
+      if (!feedback && lockedStep === null) {
+        feedbackBox.className = "feedback-box";
+        feedbackBox.textContent = "Hover over the bass clef stave, then click or tap to lock your note.";
+        return;
+      }
+
+      if (!feedback && lockedStep !== null) {
+        const note = lockedNote();
+        feedbackBox.className = "feedback-box";
+        feedbackBox.innerHTML = `Locked in: <strong>${note ? noteName(note) : "selected note"}</strong>. Click confirm.`;
+        return;
+      }
+
+      if (feedback === "correct") {
+        feedbackBox.className = "feedback-box feedback-correct";
+        feedbackBox.textContent = "✔ Correct";
+        return;
+      }
+
+      if (feedback === "incorrect") {
+        feedbackBox.className = "feedback-box feedback-incorrect";
+        feedbackBox.textContent = "✖ Incorrect";
+      }
+    }
+
+    function render() {
+      updateStats();
+      drawQuestion();
+      drawAnswer();
+      updateFeedback();
+    }
+
+    function nextQuestion() {
+      questionIndex = randomQuestion(questionIndex);
+      hoverStep = null;
+      lockedStep = null;
+      feedback = null;
+      render();
+    }
+
+    function confirmAnswer() {
+      if (lockedStep === null || feedback !== null) return;
+
+      const answer = bassAnswerNotes[questionIndex];
+      const isCorrect = lockedStep === answer.step;
+
+      attempted += 1;
+      if (isCorrect) correct += 1;
+      streak = isCorrect ? streak + 1 : 0;
+      bestStreak = Math.max(bestStreak, streak);
+      feedback = isCorrect ? "correct" : "incorrect";
+
+      render();
+
+      clearTimeout(timer);
+      timer = setTimeout(nextQuestion, isCorrect ? 2000 : 4000);
+    }
+
+    function resetScore() {
+      clearTimeout(timer);
+      correct = 0;
+      attempted = 0;
+      streak = 0;
+      bestStreak = 0;
+      nextQuestion();
+    }
+
+    answerHitbox.addEventListener("pointermove", (evt) => {
+      if (feedback || lockedStep !== null) return;
+      const y = pointerToSvg(evt);
+      hoverStep = clampStep(stepFromPointerY(y, BASS_TOP));
+      drawAnswer();
+    });
+
+    answerHitbox.addEventListener("pointerdown", (evt) => {
+      if (feedback) return;
+      const y = pointerToSvg(evt);
+      const step = clampStep(stepFromPointerY(y, BASS_TOP));
+      lockedStep = step;
+      hoverStep = step;
+      render();
+    });
+
+    unlockBtn.addEventListener("click", () => {
+      if (!feedback) {
+        lockedStep = null;
+        render();
+      }
+    });
+
+    confirmBtn.addEventListener("click", confirmAnswer);
+    resetBtn.addEventListener("click", resetScore);
+
+    drawStaff(trebleStaff, TREBLE_TOP);
+    drawStaff(bassStaff, BASS_TOP);
+    render();
+  </script>
+</body>
+</html>
