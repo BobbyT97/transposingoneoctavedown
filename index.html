@@ -1,628 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Transpose One Octave Down</title>
-  <style>
-    :root {
-      --stone-50: #fafaf9;
-      --stone-100: #f5f5f4;
-      --stone-200: #e7e5e4;
-      --stone-300: #d6d3d1;
-      --stone-500: #78716c;
-      --stone-600: #57534e;
-      --stone-700: #44403c;
-      --stone-800: #292524;
-      --stone-950: #0c0a09;
-      --green: #15803d;
-      --red: #b91c1c;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      background: var(--stone-50);
-      color: var(--stone-950);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      padding: 24px;
-    }
-
-    .container {
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-
-    .card {
-      background: white;
-      border: 1px solid var(--stone-200);
-      border-radius: 18px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.04);
-    }
-
-    header {
-      padding: 24px;
-      margin-bottom: 20px;
-    }
-
-    .header-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(1.6rem, 3vw, 2.2rem);
-      line-height: 1.1;
-    }
-
-    .subtitle {
-      margin: 10px 0 0;
-      color: var(--stone-700);
-      font-size: 1rem;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      min-width: 280px;
-    }
-
-    .stat {
-      background: var(--stone-50);
-      border: 1px solid var(--stone-200);
-      border-radius: 14px;
-      padding: 12px;
-      text-align: center;
-    }
-
-    .stat-label {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--stone-500);
-      margin-bottom: 3px;
-    }
-
-    .stat-value {
-      font-size: 1.35rem;
-      font-weight: 700;
-    }
-
-    main {
-      padding: 22px;
-    }
-
-    .top-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-      margin-bottom: 14px;
-    }
-
-    .eyebrow {
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--stone-500);
-    }
-
-    .task-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-top: 2px;
-    }
-
-    button {
-      appearance: none;
-      border: 1px solid var(--stone-300);
-      background: white;
-      color: var(--stone-950);
-      border-radius: 14px;
-      padding: 12px 18px;
-      font-weight: 700;
-      cursor: pointer;
-      font-size: 0.95rem;
-    }
-
-    button:hover:not(:disabled) {
-      background: var(--stone-100);
-    }
-
-    button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .primary {
-      background: var(--stone-950);
-      color: white;
-      border-color: var(--stone-950);
-    }
-
-    .primary:hover:not(:disabled) {
-      background: var(--stone-800);
-    }
-
-    .svg-wrap {
-      border: 1px solid var(--stone-200);
-      border-radius: 14px;
-      overflow: hidden;
-      background: white;
-    }
-
-    svg {
-      display: block;
-      width: 100%;
-      height: auto;
-      user-select: none;
-      touch-action: none;
-    }
-
-    .feedback-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      align-items: center;
-      margin-top: 18px;
-    }
-
-    .feedback-box {
-      min-height: 58px;
-      border: 1px solid var(--stone-200);
-      background: var(--stone-50);
-      border-radius: 14px;
-      padding: 16px;
-      color: var(--stone-700);
-      display: flex;
-      align-items: center;
-    }
-
-    .feedback-correct {
-      color: var(--green);
-      font-weight: 800;
-      font-size: 1.15rem;
-    }
-
-    .feedback-incorrect {
-      color: var(--red);
-      font-weight: 800;
-      font-size: 1.15rem;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .footer-note {
-      margin-top: 14px;
-      color: var(--stone-600);
-      font-size: 0.88rem;
-    }
-
-    @media (max-width: 720px) {
-      body {
-        padding: 12px;
-      }
-
-      header, main {
-        padding: 16px;
-      }
-
-      .stats {
-        width: 100%;
-        min-width: 0;
-      }
-
-      .feedback-row {
-        grid-template-columns: 1fr;
-      }
-
-      .actions {
-        justify-content: stretch;
-      }
-
-      .actions button {
-        flex: 1;
-      }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transposing</title>
+<style>
+:root{--stone-50:#fafaf9;--stone-100:#f5f5f4;--stone-200:#e7e5e4;--stone-300:#d6d3d1;--stone-500:#78716c;--stone-600:#57534e;--stone-700:#44403c;--stone-800:#292524;--stone-950:#0c0a09;--green:#15803d;--red:#b91c1c}
+*{box-sizing:border-box}body{margin:0;background:var(--stone-50);color:var(--stone-950);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}.container{max-width:1100px;margin:0 auto}.card{background:white;border:1px solid var(--stone-200);border-radius:18px;box-shadow:0 1px 6px rgba(0,0,0,.04)}header{padding:24px;margin-bottom:20px}.header-row{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap}h1{margin:0;font-size:clamp(1.6rem,3vw,2.2rem);line-height:1.1}.subtitle{margin:10px 0 0;color:var(--stone-700);font-size:1rem}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;min-width:280px}.stat{background:var(--stone-50);border:1px solid var(--stone-200);border-radius:14px;padding:12px;text-align:center}.stat-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--stone-500);margin-bottom:3px}.stat-value{font-size:1.35rem;font-weight:700}main{padding:22px}.top-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}button{appearance:none;border:1px solid var(--stone-300);background:white;color:var(--stone-950);border-radius:14px;padding:12px 18px;font-weight:700;cursor:pointer;font-size:.95rem}button:hover:not(:disabled){background:var(--stone-100)}button:disabled{opacity:.4;cursor:not-allowed}.primary,.active{background:var(--stone-950);color:white;border-color:var(--stone-950)}.primary:hover:not(:disabled){background:var(--stone-800)}.fake-disabled{opacity:.4;cursor:not-allowed}.svg-wrap{position:relative;border:1px solid var(--stone-200);border-radius:14px;overflow:hidden;background:white}svg{display:block;width:100%;height:auto;user-select:none;touch-action:none}.nudge-controls{position:absolute;right:16px;top:58%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}.nudge-controls button{background:white;padding:12px 16px;font-size:1.1rem;box-shadow:0 1px 4px rgba(0,0,0,.08)}.rhythm-panel{margin-top:16px;border:1px solid var(--stone-200);background:var(--stone-50);border-radius:14px;padding:12px}.rhythm-title{margin-bottom:8px;font-size:.9rem;font-weight:700;color:var(--stone-700)}.rhythm-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.rhythm-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:white}.rhythm-btn svg{width:40px;height:48px}.feedback-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-top:18px}.feedback-box{min-height:58px;border:1px solid var(--stone-200);background:var(--stone-50);border-radius:14px;padding:16px;color:var(--stone-700);display:flex;align-items:center}.feedback-correct{color:var(--green);font-weight:800;font-size:1.15rem}.feedback-incorrect,.feedback-error{color:var(--red);font-weight:800;font-size:1.15rem}.actions{display:flex;gap:8px;justify-content:flex-end}.footer-note{margin-top:14px;color:var(--stone-600);font-size:.88rem}@media(max-width:720px){body{padding:12px}header,main{padding:16px}.stats{width:100%;min-width:0}.rhythm-grid{grid-template-columns:repeat(2,1fr)}.feedback-row{grid-template-columns:1fr}.actions{justify-content:stretch}.actions button{flex:1}}
+</style>
 </head>
 <body>
-  <div class="container">
-    <header class="card">
-      <div class="header-row">
-        <div>
-          <h1>Transpose One Octave Down</h1>
-          <p class="subtitle">Read the note in the treble clef. Place the matching note one octave lower in the bass clef.</p>
-        </div>
-
-        <div class="stats">
-          <div class="stat">
-            <div class="stat-label">Score</div>
-            <div class="stat-value" id="score">0/0</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Accuracy</div>
-            <div class="stat-value" id="accuracy">0%</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Streak</div>
-            <div class="stat-value" id="streak">0</div>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <main class="card">
-      <div class="top-row">
-        <div>
-          <div class="eyebrow">Current question</div>
-          <div class="task-title">Transpose the treble note down one octave.</div>
-        </div>
-        <button id="resetBtn">Reset score</button>
-      </div>
-
-      <div class="svg-wrap">
-        <svg id="musicSvg" viewBox="0 0 720 380" aria-label="Grand staff transposition quiz">
-          <rect x="0" y="0" width="720" height="380" fill="white"></rect>
-
-          <g id="trebleStaff"></g>
-          <g id="bassStaff"></g>
-
-          <text x="116" y="119" font-size="104" font-family="serif" dominant-baseline="middle">𝄞</text>
-          <text x="112" y="260" font-size="81" font-family="serif" dominant-baseline="middle">𝄢</text>
-
-          <g id="questionNote" transform="translate(245 0)"></g>
-
-          <rect
-            id="answerHitbox"
-            x="193"
-            y="198"
-            width="104"
-            height="154"
-            fill="transparent"
-          ></rect>
-
-          <g id="answerLayer"></g>
-        </svg>
-      </div>
-
-      <div class="feedback-row">
-        <div class="feedback-box" id="feedbackBox">Hover over the bass clef stave, then click or tap to lock in your note.</div>
-        <div class="actions">
-          <button id="unlockBtn" disabled>Unlock</button>
-          <button class="primary" id="confirmBtn" disabled>Confirm</button>
-        </div>
-      </div>
-
-      <div class="footer-note" id="footerNote">Best streak: 0</div>
-    </main>
-  </div>
-
-  <script>
-    const STAFF_LEFT = 96;
-    const STAFF_RIGHT = 440;
-    const LINE_GAP = 14;
-    const TREBLE_TOP = 78;
-    const BASS_TOP = 226;
-    const NOTE_RX = 12;
-    const NOTE_RY = 8;
-    const QUESTION_X = 245;
-
-    const trebleNotes = [
-      { letter: "C", octave: 4, step: -2 },
-      { letter: "D", octave: 4, step: -1 },
-      { letter: "E", octave: 4, step: 0 },
-      { letter: "F", octave: 4, step: 1 },
-      { letter: "G", octave: 4, step: 2 },
-      { letter: "A", octave: 4, step: 3 },
-      { letter: "B", octave: 4, step: 4 },
-      { letter: "C", octave: 5, step: 5 },
-    ];
-
-    const bassAnswerNotes = [
-      { letter: "C", octave: 3, step: 3 },
-      { letter: "D", octave: 3, step: 4 },
-      { letter: "E", octave: 3, step: 5 },
-      { letter: "F", octave: 3, step: 6 },
-      { letter: "G", octave: 3, step: 7 },
-      { letter: "A", octave: 3, step: 8 },
-      { letter: "B", octave: 3, step: 9 },
-      { letter: "C", octave: 4, step: 10 },
-    ];
-
-    let questionIndex = randomQuestion();
-    let hoverStep = null;
-    let lockedStep = null;
-    let feedback = null;
-    let correct = 0;
-    let attempted = 0;
-    let streak = 0;
-    let bestStreak = 0;
-    let timer = null;
-
-    const svg = document.getElementById("musicSvg");
-    const trebleStaff = document.getElementById("trebleStaff");
-    const bassStaff = document.getElementById("bassStaff");
-    const questionNote = document.getElementById("questionNote");
-    const answerHitbox = document.getElementById("answerHitbox");
-    const answerLayer = document.getElementById("answerLayer");
-    const scoreEl = document.getElementById("score");
-    const accuracyEl = document.getElementById("accuracy");
-    const streakEl = document.getElementById("streak");
-    const feedbackBox = document.getElementById("feedbackBox");
-    const unlockBtn = document.getElementById("unlockBtn");
-    const confirmBtn = document.getElementById("confirmBtn");
-    const resetBtn = document.getElementById("resetBtn");
-    const footerNote = document.getElementById("footerNote");
-
-    function svgEl(name, attrs = {}) {
-      const el = document.createElementNS("http://www.w3.org/2000/svg", name);
-      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
-      return el;
-    }
-
-    function noteName(note) {
-      return `${note.letter}${note.octave}`;
-    }
-
-    function yForStep(top, step) {
-      const bottomLineY = top + LINE_GAP * 4;
-      return bottomLineY - step * (LINE_GAP / 2);
-    }
-
-    function stepFromPointerY(y, top) {
-      const bottomLineY = top + LINE_GAP * 4;
-      return Math.round((bottomLineY - y) / (LINE_GAP / 2));
-    }
-
-    function clampStep(step) {
-      return Math.max(3, Math.min(10, step));
-    }
-
-    function randomQuestion(previousIndex = null) {
-      let next = Math.floor(Math.random() * trebleNotes.length);
-      if (trebleNotes.length > 1) {
-        while (next === previousIndex) next = Math.floor(Math.random() * trebleNotes.length);
-      }
-      return next;
-    }
-
-    function drawStaff(group, top) {
-      group.innerHTML = "";
-      for (let i = 0; i < 5; i++) {
-        group.appendChild(svgEl("line", {
-          x1: STAFF_LEFT,
-          x2: STAFF_RIGHT,
-          y1: top + i * LINE_GAP,
-          y2: top + i * LINE_GAP,
-          stroke: "currentColor",
-          "stroke-width": "1.5"
-        }));
-      }
-
-      group.appendChild(svgEl("line", {
-        x1: STAFF_RIGHT,
-        x2: STAFF_RIGHT,
-        y1: top,
-        y2: top + LINE_GAP * 4,
-        stroke: "currentColor",
-        "stroke-width": "1.5"
-      }));
-    }
-
-    function ledgerLines(parent, x, step, clef) {
-      const lineYs = [];
-      if (clef === "treble" && step <= -2) {
-        lineYs.push(yForStep(TREBLE_TOP, -2));
-      }
-      if (clef === "bass" && step >= 10) {
-        lineYs.push(yForStep(BASS_TOP, 10));
-      }
-
-      lineYs.forEach((lineY) => {
-        parent.appendChild(svgEl("line", {
-          x1: x - 19,
-          x2: x + 19,
-          y1: lineY,
-          y2: lineY,
-          stroke: "currentColor",
-          "stroke-width": "1.5",
-          "pointer-events": "none"
-        }));
-      });
-    }
-
-    function noteHead(parent, x, y, filled = true, colour = "currentColor", opacity = 1) {
-      parent.appendChild(svgEl("ellipse", {
-        cx: x,
-        cy: y,
-        rx: NOTE_RX,
-        ry: NOTE_RY,
-        transform: `rotate(-18 ${x} ${y})`,
-        fill: filled ? colour : "transparent",
-        stroke: colour,
-        "stroke-width": "2",
-        opacity: opacity,
-        "pointer-events": "none"
-      }));
-    }
-
-    function pointerToSvg(evt) {
-      const point = svg.createSVGPoint();
-      point.x = evt.clientX;
-      point.y = evt.clientY;
-      const svgPoint = point.matrixTransform(svg.getScreenCTM().inverse());
-      return svgPoint.y;
-    }
-
-    function lockedNote() {
-      if (lockedStep === null) return null;
-      return bassAnswerNotes.find((note) => note.step === lockedStep);
-    }
-
-    function updateStats() {
-      const percent = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-      scoreEl.textContent = `${correct}/${attempted}`;
-      accuracyEl.textContent = `${percent}%`;
-      streakEl.textContent = streak;
-      footerNote.textContent = `Best streak: ${bestStreak}`;
-    }
-
-    function drawQuestion() {
-      questionNote.innerHTML = "";
-      const question = trebleNotes[questionIndex];
-      ledgerLines(questionNote, 0, question.step, "treble");
-      noteHead(questionNote, 0, yForStep(TREBLE_TOP, question.step), true);
-    }
-
-    function drawAnswer() {
-      answerLayer.innerHTML = "";
-      const answer = bassAnswerNotes[questionIndex];
-      const activeStep = lockedStep ?? hoverStep;
-
-      if (feedback === "incorrect" && lockedStep !== null) {
-        const wrongGroup = svgEl("g", { transform: `translate(${QUESTION_X} 0)`, color: "#b91c1c" });
-        ledgerLines(wrongGroup, 0, lockedStep, "bass");
-        noteHead(wrongGroup, 0, yForStep(BASS_TOP, lockedStep), true, "#b91c1c");
-        answerLayer.appendChild(wrongGroup);
-
-        const correctGroup = svgEl("g", { transform: `translate(${QUESTION_X + 70} 0)`, color: "#15803d" });
-        ledgerLines(correctGroup, 0, answer.step, "bass");
-        noteHead(correctGroup, 0, yForStep(BASS_TOP, answer.step), true, "#15803d");
-
-        answerLayer.appendChild(correctGroup);
-        return;
-      }
-
-      if (feedback === "correct" && lockedStep !== null) {
-        const group = svgEl("g", { transform: `translate(${QUESTION_X} 0)`, color: "#15803d" });
-        ledgerLines(group, 0, lockedStep, "bass");
-        noteHead(group, 0, yForStep(BASS_TOP, lockedStep), true, "#15803d");
-        answerLayer.appendChild(group);
-        return;
-      }
-
-      if (activeStep !== null) {
-        const group = svgEl("g", { transform: `translate(${QUESTION_X} 0)` });
-        ledgerLines(group, 0, activeStep, "bass");
-        noteHead(group, 0, yForStep(BASS_TOP, activeStep), lockedStep !== null, "currentColor", lockedStep === null ? 0.55 : 1);
-        answerLayer.appendChild(group);
-      }
-    }
-
-    function updateFeedback() {
-      confirmBtn.disabled = feedback !== null || lockedStep === null;
-      unlockBtn.disabled = feedback !== null || lockedStep === null;
-
-      if (!feedback && lockedStep === null) {
-        feedbackBox.className = "feedback-box";
-        feedbackBox.textContent = "Hover over the bass clef stave, then click or tap to lock in your note.";
-        return;
-      }
-
-      if (!feedback && lockedStep !== null) {
-        const note = lockedNote();
-        feedbackBox.className = "feedback-box";
-        feedbackBox.textContent = "Click confirm to check your answer.";
-        return;
-      }
-
-      if (feedback === "correct") {
-        feedbackBox.className = "feedback-box feedback-correct";
-        feedbackBox.textContent = "✔ Correct";
-        return;
-      }
-
-      if (feedback === "incorrect") {
-        feedbackBox.className = "feedback-box feedback-incorrect";
-        feedbackBox.textContent = "✖ Incorrect";
-      }
-    }
-
-    function render() {
-      updateStats();
-      drawQuestion();
-      drawAnswer();
-      updateFeedback();
-    }
-
-    function nextQuestion() {
-      questionIndex = randomQuestion(questionIndex);
-      hoverStep = null;
-      lockedStep = null;
-      feedback = null;
-      render();
-    }
-
-    function confirmAnswer() {
-      if (lockedStep === null || feedback !== null) return;
-
-      const answer = bassAnswerNotes[questionIndex];
-      const isCorrect = lockedStep === answer.step;
-
-      attempted += 1;
-      if (isCorrect) correct += 1;
-      streak = isCorrect ? streak + 1 : 0;
-      bestStreak = Math.max(bestStreak, streak);
-      feedback = isCorrect ? "correct" : "incorrect";
-
-      render();
-
-      clearTimeout(timer);
-      timer = setTimeout(nextQuestion, isCorrect ? 2000 : 4000);
-    }
-
-    function resetScore() {
-      clearTimeout(timer);
-      correct = 0;
-      attempted = 0;
-      streak = 0;
-      bestStreak = 0;
-      nextQuestion();
-    }
-
-    answerHitbox.addEventListener("pointermove", (evt) => {
-      if (feedback || lockedStep !== null) return;
-      const y = pointerToSvg(evt);
-      hoverStep = clampStep(stepFromPointerY(y, BASS_TOP));
-      drawAnswer();
-    });
-
-    answerHitbox.addEventListener("pointerdown", (evt) => {
-      if (feedback) return;
-      const y = pointerToSvg(evt);
-      const step = clampStep(stepFromPointerY(y, BASS_TOP));
-      lockedStep = step;
-      hoverStep = step;
-      render();
-    });
-
-    unlockBtn.addEventListener("click", () => {
-      if (!feedback) {
-        lockedStep = null;
-        render();
-      }
-    });
-
-    confirmBtn.addEventListener("click", confirmAnswer);
-    resetBtn.addEventListener("click", resetScore);
-
-    drawStaff(trebleStaff, TREBLE_TOP);
-    drawStaff(bassStaff, BASS_TOP);
-    render();
-  </script>
+<div class="container">
+<header class="card"><div class="header-row"><div><h1>Transposing</h1><p class="subtitle">Transpose the following note one octave lower into the bass clef.</p></div><div class="stats"><div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score">0/0</div></div><div class="stat"><div class="stat-label">Accuracy</div><div class="stat-value" id="accuracy">0%</div></div><div class="stat"><div class="stat-label">Streak</div><div class="stat-value" id="streak">0</div></div></div></div></header>
+<main class="card">
+<div class="top-row"><button id="notesModeBtn" class="active">Notes Only</button><button id="rhythmModeBtn">Notes and Rhythms</button><button id="resetBtn">Reset score</button></div>
+<div class="svg-wrap">
+<svg id="musicSvg" viewBox="0 0 720 380" aria-label="Grand staff transposition quiz">
+<rect x="0" y="0" width="720" height="380" fill="white"></rect>
+<g id="trebleStaff"></g><g id="bassStaff"></g>
+<text id="trebleClef" x="116" y="119" font-size="118" font-family="serif" dominant-baseline="middle"></text>
+<text id="bassClef" x="112" y="260" font-size="81" font-family="serif" dominant-baseline="middle"></text>
+<g id="questionNote" transform="translate(245 0)"></g>
+<rect id="answerHitbox" x="193" y="198" width="104" height="154" fill="transparent"></rect>
+<g id="answerLayer"></g>
+</svg>
+<div class="nudge-controls"><button id="upBtn" aria-label="Move note up">↑</button><button id="downBtn" aria-label="Move note down">↓</button></div>
+</div>
+<div id="rhythmPanel" class="rhythm-panel" style="display:none"><div class="rhythm-title">Select the rhythm:</div><div class="rhythm-grid" id="rhythmGrid"></div></div>
+<div class="feedback-row"><div class="feedback-box" id="feedbackBox">Hover over the bass clef stave, then click or tap to lock in your note.</div><div class="actions"><button id="unlockBtn" disabled>Unlock</button><button class="primary" id="confirmBtn" disabled>Confirm</button></div></div>
+<div class="footer-note" id="footerNote">Best streak: 0</div>
+</main>
+</div>
+<script>
+const STAFF_LEFT=96,STAFF_RIGHT=440,LINE_GAP=14,TREBLE_TOP=78,BASS_TOP=226,NOTE_RX=10,NOTE_RY=7,QUESTION_X=245;
+const TREBLE_CLEF=String.fromCodePoint(0x1d11e),BASS_CLEF=String.fromCodePoint(0x1d122),TICK=String.fromCodePoint(0x2714),CROSS=String.fromCodePoint(0x2716),GREEN="#15803d",RED="#b91c1c";
+const trebleNotes=[{letter:"C",octave:4,step:-2},{letter:"D",octave:4,step:-1},{letter:"E",octave:4,step:0},{letter:"F",octave:4,step:1},{letter:"G",octave:4,step:2},{letter:"A",octave:4,step:3},{letter:"B",octave:4,step:4},{letter:"C",octave:5,step:5}];
+const bassAnswerNotes=[{letter:"C",octave:3,step:3},{letter:"D",octave:3,step:4},{letter:"E",octave:3,step:5},{letter:"F",octave:3,step:6},{letter:"G",octave:3,step:7},{letter:"A",octave:3,step:8},{letter:"B",octave:3,step:9},{letter:"C",octave:4,step:10}];
+const rhythms=[{id:"semibreve",label:"Semibreve"},{id:"minim",label:"Minim"},{id:"crotchet",label:"Crotchet"},{id:"quaver",label:"Quaver"}];
+let mode="notes",questionIndex=randomQuestion(),rhythmIndex=randomRhythm(),selectedRhythm=null,hoverStep=null,lockedStep=null,feedback=null,feedbackDetail=null,rhythmError="",correct=0,attempted=0,streak=0,bestStreak=0,timer=null;
+const svg=document.getElementById("musicSvg"),trebleStaff=document.getElementById("trebleStaff"),bassStaff=document.getElementById("bassStaff"),questionNote=document.getElementById("questionNote"),answerHitbox=document.getElementById("answerHitbox"),answerLayer=document.getElementById("answerLayer"),scoreEl=document.getElementById("score"),accuracyEl=document.getElementById("accuracy"),streakEl=document.getElementById("streak"),footerNote=document.getElementById("footerNote"),feedbackBox=document.getElementById("feedbackBox"),unlockBtn=document.getElementById("unlockBtn"),confirmBtn=document.getElementById("confirmBtn"),resetBtn=document.getElementById("resetBtn"),notesModeBtn=document.getElementById("notesModeBtn"),rhythmModeBtn=document.getElementById("rhythmModeBtn"),rhythmPanel=document.getElementById("rhythmPanel"),rhythmGrid=document.getElementById("rhythmGrid"),upBtn=document.getElementById("upBtn"),downBtn=document.getElementById("downBtn");
+document.getElementById("trebleClef").textContent=TREBLE_CLEF;document.getElementById("bassClef").textContent=BASS_CLEF;
+function svgEl(n,a={}){const e=document.createElementNS("http://www.w3.org/2000/svg",n);Object.entries(a).forEach(([k,v])=>e.setAttribute(k,v));return e}
+function yForStep(top,step){return top+LINE_GAP*4-step*(LINE_GAP/2)}function stepFromPointerY(y,top){return Math.round((top+LINE_GAP*4-y)/(LINE_GAP/2))}function clampStep(s){return Math.max(3,Math.min(10,s))}
+function randomIndex(l,p=null){let n=Math.floor(Math.random()*l);if(l>1)while(n===p)n=Math.floor(Math.random()*l);return n}function randomQuestion(p=null){return randomIndex(trebleNotes.length,p)}function randomRhythm(p=null){return randomIndex(rhythms.length,p)}function stemGoesDown(step){return step>4}
+function drawStaff(g,top){g.innerHTML="";for(let i=0;i<5;i++)g.appendChild(svgEl("line",{x1:STAFF_LEFT,x2:STAFF_RIGHT,y1:top+i*LINE_GAP,y2:top+i*LINE_GAP,stroke:"currentColor","stroke-width":"1.5"}));g.appendChild(svgEl("line",{x1:STAFF_RIGHT,x2:STAFF_RIGHT,y1:top,y2:top+LINE_GAP*4,stroke:"currentColor","stroke-width":"1.5"}))}
+function addLedgerLines(parent,x,step,clef,colour="currentColor"){const ys=[];if(clef==="treble"&&step<=-2)ys.push(yForStep(TREBLE_TOP,-2));if(clef==="bass"&&step>=10)ys.push(yForStep(BASS_TOP,10));ys.forEach(y=>parent.appendChild(svgEl("line",{x1:x-19,x2:x+19,y1:y,y2:y,stroke:colour,"stroke-width":"1.5","pointer-events":"none"})))}
+function addRhythmNote(parent,{x,y,step,rhythm="crotchet",colour="currentColor",opacity=1,preview=false}){const open=rhythm==="semibreve"||rhythm==="minim",hasStem=rhythm==="minim"||rhythm==="crotchet"||rhythm==="quaver",down=stemGoesDown(step),stemX=down?x-NOTE_RX+1:x+NOTE_RX-1,stemEndY=down?y+48:y-48;const g=svgEl("g",{opacity,"pointer-events":"none"});g.appendChild(svgEl("ellipse",{cx:x,cy:y,rx:NOTE_RX,ry:NOTE_RY,transform:`rotate(-18 ${x} ${y})`,fill:open?"transparent":colour,stroke:colour,"stroke-width":preview?"2":"2.2"}));if(hasStem)g.appendChild(svgEl("line",{x1:stemX,x2:stemX,y1:y,y2:stemEndY,stroke:colour,"stroke-width":"2"}));if(rhythm==="quaver"){const d=down?`M ${stemX} ${stemEndY} C ${stemX+22} ${stemEndY-8}, ${stemX+21} ${stemEndY-24}, ${stemX+4} ${stemEndY-31}`:`M ${stemX} ${stemEndY} C ${stemX+22} ${stemEndY+8}, ${stemX+21} ${stemEndY+24}, ${stemX+4} ${stemEndY+31}`;g.appendChild(svgEl("path",{d,fill:"none",stroke:colour,"stroke-width":"2.2","stroke-linecap":"round"}))}parent.appendChild(g)}
+function pointerToSvgY(evt){const p=svg.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;return p.matrixTransform(svg.getScreenCTM().inverse()).y}
+function activeRhythm(){return mode==="rhythm"?(selectedRhythm||"crotchet"):"crotchet"}function trueConfirmReady(){return !feedback&&lockedStep!==null&&!(mode==="rhythm"&&selectedRhythm===null)}
+function drawQuestion(){questionNote.innerHTML="";const q=trebleNotes[questionIndex],r=rhythms[rhythmIndex];addLedgerLines(questionNote,0,q.step,"treble");addRhythmNote(questionNote,{x:0,y:yForStep(TREBLE_TOP,q.step),step:q.step,rhythm:mode==="rhythm"?r.id:"crotchet"})}
+function drawAnswer(){answerLayer.innerHTML="";const ans=bassAnswerNotes[questionIndex],rh=rhythms[rhythmIndex],activeStep=lockedStep??hoverStep;if(feedback==="incorrect"&&lockedStep!==null&&feedbackDetail){const wrong=svgEl("g",{transform:`translate(${QUESTION_X} 0)`}),wc=feedbackDetail.pitchCorrect?GREEN:RED;addLedgerLines(wrong,0,lockedStep,"bass",wc);addRhythmNote(wrong,{x:0,y:yForStep(BASS_TOP,lockedStep),step:lockedStep,rhythm:mode==="rhythm"?selectedRhythm:"crotchet",colour:wc});answerLayer.appendChild(wrong);if(!feedbackDetail.pitchCorrect||!feedbackDetail.rhythmCorrect){const cg=svgEl("g",{transform:`translate(${QUESTION_X+70} 0)`});addLedgerLines(cg,0,ans.step,"bass",GREEN);addRhythmNote(cg,{x:0,y:yForStep(BASS_TOP,ans.step),step:ans.step,rhythm:mode==="rhythm"?rh.id:"crotchet",colour:GREEN});answerLayer.appendChild(cg)}return}if(feedback==="correct"&&lockedStep!==null){const g=svgEl("g",{transform:`translate(${QUESTION_X} 0)`});addLedgerLines(g,0,lockedStep,"bass",GREEN);addRhythmNote(g,{x:0,y:yForStep(BASS_TOP,lockedStep),step:lockedStep,rhythm:mode==="rhythm"?selectedRhythm:"crotchet",colour:GREEN});answerLayer.appendChild(g);return}if(activeStep!==null){const g=svgEl("g",{transform:`translate(${QUESTION_X} 0)`});addLedgerLines(g,0,activeStep,"bass");addRhythmNote(g,{x:0,y:yForStep(BASS_TOP,activeStep),step:activeStep,rhythm:activeRhythm(),opacity:lockedStep===null?.55:1,preview:lockedStep===null});answerLayer.appendChild(g)}}
+function drawRhythmButtons(){rhythmGrid.innerHTML="";rhythms.forEach(r=>{const b=document.createElement("button");b.className=`rhythm-btn ${selectedRhythm===r.id?"active":""}`;b.disabled=Boolean(feedback);const icon=document.createElementNS("http://www.w3.org/2000/svg","svg");icon.setAttribute("viewBox","0 0 56 72");addRhythmNote(icon,{x:20,y:48,step:4,rhythm:r.id});const s=document.createElement("span");s.textContent=r.label;b.appendChild(icon);b.appendChild(s);b.addEventListener("click",()=>{if(feedback)return;selectedRhythm=r.id;rhythmError="";render()});rhythmGrid.appendChild(b)})}
+function updateStats(){const pct=attempted===0?0:Math.round(correct/attempted*100);scoreEl.textContent=`${correct}/${attempted}`;accuracyEl.textContent=`${pct}%`;streakEl.textContent=streak;footerNote.textContent=`Best streak: ${bestStreak}`}
+function updateModeButtons(){notesModeBtn.classList.toggle("active",mode==="notes");rhythmModeBtn.classList.toggle("active",mode==="rhythm");rhythmPanel.style.display=mode==="rhythm"?"block":"none"}
+function updateFeedback(){const missing=mode==="rhythm"&&lockedStep!==null&&selectedRhythm===null&&!feedback;unlockBtn.disabled=feedback||lockedStep===null;confirmBtn.disabled=lockedStep===null||Boolean(feedback);confirmBtn.classList.toggle("fake-disabled",missing);if(rhythmError&&!feedback){feedbackBox.className="feedback-box feedback-error";feedbackBox.textContent=rhythmError;return}if(!feedback&&lockedStep===null){feedbackBox.className="feedback-box";feedbackBox.textContent="Hover over the bass clef stave, then click or tap to lock in your note.";return}if(!feedback&&lockedStep!==null&&mode==="rhythm"&&selectedRhythm===null){feedbackBox.className="feedback-box";feedbackBox.textContent="Select the rhythm, then click confirm to check your answer.";return}if(!feedback&&lockedStep!==null){feedbackBox.className="feedback-box";feedbackBox.textContent="Click confirm to check your answer.";return}if(feedback==="correct"){feedbackBox.className="feedback-box feedback-correct";feedbackBox.textContent=`${TICK} Correct`;return}if(feedback==="incorrect"){feedbackBox.className="feedback-box feedback-incorrect";feedbackBox.textContent=`${CROSS} Incorrect`}}
+function render(){updateStats();updateModeButtons();drawQuestion();drawAnswer();drawRhythmButtons();updateFeedback()}
+function nextQuestion(){questionIndex=randomQuestion(questionIndex);rhythmIndex=randomRhythm(rhythmIndex);selectedRhythm=null;hoverStep=null;lockedStep=null;feedback=null;feedbackDetail=null;rhythmError="";render()}
+function clearTimer(){if(timer){clearTimeout(timer);timer=null}}function changeMode(m){clearTimer();mode=m;correct=0;attempted=0;streak=0;bestStreak=0;nextQuestion()}
+function confirmAnswer(){if(mode==="rhythm"&&selectedRhythm===null){rhythmError="Please select a rhythm before confirming.";render();return}if(!trueConfirmReady())return;const ans=bassAnswerNotes[questionIndex],rh=rhythms[rhythmIndex],pc=lockedStep===ans.step,rc=mode==="rhythm"?selectedRhythm===rh.id:true,isCorrect=pc&&rc;attempted++;if(isCorrect)correct++;streak=isCorrect?streak+1:0;bestStreak=Math.max(bestStreak,streak);feedback=isCorrect?"correct":"incorrect";feedbackDetail={pitchCorrect:pc,rhythmCorrect:rc};render();clearTimer();timer=setTimeout(nextQuestion,isCorrect?2000:4000)}
+function resetScore(){clearTimer();correct=0;attempted=0;streak=0;bestStreak=0;nextQuestion()}
+function nudgeNote(d){if(feedback)return;const ans=bassAnswerNotes[questionIndex],current=lockedStep??hoverStep??ans.step,next=clampStep(current+d);lockedStep=next;hoverStep=next;rhythmError="";render()}
+answerHitbox.addEventListener("pointermove",e=>{if(feedback||lockedStep!==null)return;hoverStep=clampStep(stepFromPointerY(pointerToSvgY(e),BASS_TOP));drawAnswer()});
+answerHitbox.addEventListener("pointerdown",e=>{if(feedback)return;lockedStep=clampStep(stepFromPointerY(pointerToSvgY(e),BASS_TOP));hoverStep=lockedStep;rhythmError="";render()});
+notesModeBtn.addEventListener("click",()=>changeMode("notes"));rhythmModeBtn.addEventListener("click",()=>changeMode("rhythm"));resetBtn.addEventListener("click",resetScore);unlockBtn.addEventListener("click",()=>{if(feedback)return;lockedStep=null;rhythmError="";render()});confirmBtn.addEventListener("click",confirmAnswer);upBtn.addEventListener("click",()=>nudgeNote(1));downBtn.addEventListener("click",()=>nudgeNote(-1));
+drawStaff(trebleStaff,TREBLE_TOP);drawStaff(bassStaff,BASS_TOP);render();
+</script>
 </body>
 </html>
