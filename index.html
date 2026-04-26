@@ -300,16 +300,14 @@
       </div>
 
       <div class="feedback-row">
-        <div class="feedback-box" id="feedbackBox">Hover over the bass clef stave, then click or tap to lock your note.</div>
+        <div class="feedback-box" id="feedbackBox">Hover over the bass clef stave, then click or tap to lock in your note.</div>
         <div class="actions">
           <button id="unlockBtn" disabled>Unlock</button>
           <button class="primary" id="confirmBtn" disabled>Confirm</button>
         </div>
       </div>
 
-      <div class="footer-note" id="footerNote">
-        Quiz range: treble C4–C5. Answer range: bass C3–C4. Natural notes only. Bass answer steps: C3–C4 = 3–10. Best streak: 0.
-      </div>
+      <div class="footer-note" id="footerNote">Best streak: 0</div>
     </main>
   </div>
 
@@ -480,7 +478,7 @@
       scoreEl.textContent = `${correct}/${attempted}`;
       accuracyEl.textContent = `${percent}%`;
       streakEl.textContent = streak;
-      footerNote.textContent = `Quiz range: treble C4–C5. Answer range: bass C3–C4. Natural notes only. Bass answer steps: C3–C4 = 3–10. Best streak: ${bestStreak}.`;
+      footerNote.textContent = `Best streak: ${bestStreak}`;
     }
 
     function drawQuestion() {
@@ -505,16 +503,6 @@
         ledgerLines(correctGroup, 0, answer.step, "bass");
         noteHead(correctGroup, 0, yForStep(BASS_TOP, answer.step), true, "#15803d");
 
-        const label = svgEl("text", {
-          x: 0,
-          y: yForStep(BASS_TOP, answer.step) - 22,
-          "text-anchor": "middle",
-          "font-size": "14",
-          fill: "#15803d",
-          "font-weight": "600"
-        });
-        label.textContent = "correct";
-        correctGroup.appendChild(label);
         answerLayer.appendChild(correctGroup);
         return;
       }
@@ -541,14 +529,14 @@
 
       if (!feedback && lockedStep === null) {
         feedbackBox.className = "feedback-box";
-        feedbackBox.textContent = "Hover over the bass clef stave, then click or tap to lock your note.";
+        feedbackBox.textContent = "Hover over the bass clef stave, then click or tap to lock in your note.";
         return;
       }
 
       if (!feedback && lockedStep !== null) {
         const note = lockedNote();
         feedbackBox.className = "feedback-box";
-        feedbackBox.innerHTML = `Locked in: <strong>${note ? noteName(note) : "selected note"}</strong>. Click confirm.`;
+        feedbackBox.textContent = "Click confirm to check your answer.";
         return;
       }
 
