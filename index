@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Literacy Hub</title>
+
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+  }
+
+  header {
+    background: #1f2937;
+    color: white;
+    padding: 20px;
+    text-align: center;
+  }
+
+  h1 {
+    margin: 0;
+  }
+
+  .container {
+    padding: 30px;
+    max-width: 1000px;
+    margin: auto;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    display: block;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: black;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    transition: 0.2s;
+  }
+
+  .card:hover {
+    transform: translateY(-4px);
+  }
+
+  .card h2 {
+    margin: 0 0 10px;
+  }
+
+  .card p {
+    margin: 0;
+    color: #555;
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Music Literacy Hub</h1>
+  <p>Interactive tools for learning music theory</p>
+</header>
+
+<div class="container">
+  <div class="grid">
+
+    <a class="card" href="transposing.html">
+      <h2>Transposing</h2>
+      <p>Practice moving notes between clefs</p>
+    </a>
+
+    <a class="card" href="#">
+      <h2>Note Naming</h2>
+      <p>Identify notes on the stave</p>
+    </a>
+
+    <a class="card" href="#">
+      <h2>Intervals</h2>
+      <p>Recognise musical intervals</p>
+    </a>
+
+    <a class="card" href="#">
+      <h2>Rhythm</h2>
+      <p>Develop rhythm reading skills</p>
+    </a>
+
+  </div>
+</div>
+
+</body>
+</html>
