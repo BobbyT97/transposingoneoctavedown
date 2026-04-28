@@ -1,0 +1,891 @@
+import React, { useRef, useState } from "react";
+import { motion } from "framer-motion";
+
+// =====================================================
+// KEY SIGNATURE IDENTIFIER
+// Clean rebuild
+// =====================================================
+
+const VIEWBOX_WIDTH = 720;
+const VIEWBOX_HEIGHT = 300;
+const STAFF_MARGIN = 20;
+const STAFF_LEFT = STAFF_MARGIN;
+const STAFF_RIGHT = VIEWBOX_WIDTH - STAFF_MARGIN;
+const BAR_COUNT = 3;
+
+const TREBLE_TOP = 120;
+const LINE_GAP = 11.2;
+const NOTE_RX = 6.6;
+const NOTE_RY = 4.7;
+const STEM_LENGTH = 31;
+
+const CLEF_X = STAFF_LEFT + 6;
+const KEY_SIG_X = STAFF_LEFT + 36;
+const TIME_SIG_X = STAFF_LEFT + 67;
+const MUSIC_START_X = STAFF_LEFT + 78;
+
+const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const KEYS = [
+  { id: "c-major", label: "C major", signature: "none" },
+  { id: "a-minor", label: "A minor", signature: "none" },
+  { id: "g-major", label: "G major", signature: "sharp" },
+  { id: "f-major", label: "F major", signature: "flat" },
+];
+
+const NOTE_STEPS = {
+  C4: -2,
+  D4: -1,
+  E4: 0,
+  F4: 1,
+  G4: 2,
+  A4: 3,
+  B4: 4,
+  C5: 5,
+  D5: 6,
+  E5: 7,
+  F5: 8,
+  G5: 9,
+  A5: 10,
+};
+
+const KEY_POOLS = {
+  "c-major": ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5"],
+  "a-minor": ["G4", "G#4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "G#5", "A5"],
+  "g-major": ["G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5"],
+  "f-major": ["F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5"],
+};
+
+const TONIC_START = {
+  "c-major": "C4",
+  "a-minor": "A4",
+  "g-major": "G4",
+  "f-major": "F4",
+};
+
+const RHYTHMS = [
+  { id: "semibreve", beats: 4, spacing: 8 },
+  { id: "minim", beats: 2, spacing: 4 },
+  { id: "dotted-crotchet", beats: 1.5, spacing: 3 },
+  { id: "crotchet", beats: 1, spacing: 2 },
+  { id: "quaver", beats: 0.5, spacing: 1 },
+];
+
+const STANDARD_BAR_PATTERNS = [
+  ["minim", "crotchet", "crotchet"],
+  ["crotchet", "crotchet", "minim"],
+  ["minim", "minim"],
+  ["crotchet", "crotchet", "crotchet", "crotchet"],
+  ["dotted-crotchet", "quaver", "crotchet", "crotchet"],
+  ["crotchet", "crotchet", "dotted-crotchet", "quaver"],
+  ["dotted-crotchet", "quaver", "dotted-crotchet", "quaver"],
+  ["dotted-crotchet", "quaver", "minim"],
+  ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
+  ["quaver", "quaver", "quaver", "quaver", "minim"],
+  ["crotchet", "quaver", "quaver", "quaver", "quaver", "crotchet"],
+  ["minim", "quaver", "quaver", "quaver", "quaver"],
+];
+
+const FINAL_BAR_PATTERNS = [...STANDARD_BAR_PATTERNS, ["semibreve"]];
+
+// =====================================================
+// UTILS
+// =====================================================
+
+function randomIndex(length) {
+  return Math.floor(Math.random() * length);
+}
+
+function randomItem(items) {
+  return items[randomIndex(items.length)];
+}
+
+function rhythmById(id) {
+  return RHYTHMS.find((rhythm) => rhythm.id === id) ?? RHYTHMS.find((rhythm) => rhythm.id === "crotchet");
+}
+
+function noteBase(noteName) {
+  return noteName.replace("#", "");
+}
+
+function stepForNote(noteName) {
+  return NOTE_STEPS[noteBase(noteName)] ?? NOTE_STEPS.C5;
+}
+
+function yForStep(step) {
+  const bottomLineY = TREBLE_TOP + LINE_GAP * 4;
+  return bottomLineY - step * (LINE_GAP / 2);
+}
+
+function stemGoesDown(step) {
+  return step > 4;
+}
+
+function spacingValue(rhythmId) {
+  return rhythmById(rhythmId).spacing;
+}
+
+// =====================================================
+// MELODY GENERATION
+// =====================================================
+
+function nearestPoolIndex(pool, previousNote) {
+  const previousBase = noteBase(previousNote);
+  const exact = pool.findIndex((note) => noteBase(note) === previousBase);
+  return exact >= 0 ? exact : Math.floor(pool.length / 2);
+}
+
+function chooseNextNote(pool, previousNote) {
+  const currentIndex = nearestPoolIndex(pool, previousNote);
+  const moves = [-2, -1, 0, 0, 1, 2];
+  let move = randomItem(moves);
+
+  if (Math.random() < 0.08) {
+    move = Math.random() < 0.5 ? -7 : 7;
+  }
+
+  const nextIndex = Math.max(0, Math.min(pool.length - 1, currentIndex + move));
+  return pool[nextIndex];
+}
+
+function chooseBeamedQuaverNote(pool, previousNote) {
+  const currentIndex = nearestPoolIndex(pool, previousNote);
+  const moves = [];
+
+  if (currentIndex > 1) moves.push(-2);
+  if (currentIndex > 0) moves.push(-1);
+  moves.push(0);
+  if (currentIndex < pool.length - 1) moves.push(1);
+  if (currentIndex < pool.length - 2) moves.push(2);
+
+  return pool[currentIndex + randomItem(moves)];
+}
+
+function makeBarRhythms(barIndex) {
+  const availablePatterns = barIndex === BAR_COUNT - 1 ? FINAL_BAR_PATTERNS : STANDARD_BAR_PATTERNS;
+  return randomItem(availablePatterns);
+}
+
+function makeQuestion() {
+  const key = randomItem(KEYS);
+  const pool = KEY_POOLS[key.id];
+  const bars = [];
+  let previousNote = TONIC_START[key.id];
+  let hasGSharp = false;
+
+  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
+    const rhythmPattern = makeBarRhythms(barIndex);
+    const bar = [];
+
+    for (let noteIndex = 0; noteIndex < rhythmPattern.length; noteIndex += 1) {
+      let pitch;
+
+      if (barIndex === 0 && noteIndex === 0) {
+        pitch = TONIC_START[key.id];
+      } else {
+        const currentRhythm = rhythmPattern[noteIndex];
+        const previousRhythm = rhythmPattern[noteIndex - 1];
+        const isBeamedQuaver = currentRhythm === "quaver" && previousRhythm === "quaver";
+        pitch = isBeamedQuaver ? chooseBeamedQuaverNote(pool, previousNote) : chooseNextNote(pool, previousNote);
+      }
+
+      if (key.id === "a-minor" && pitch.includes("G#")) {
+        hasGSharp = true;
+      }
+
+      bar.push({ pitch, rhythm: rhythmPattern[noteIndex] });
+      previousNote = pitch;
+    }
+
+    bars.push(bar);
+  }
+
+  if (key.id === "a-minor" && !hasGSharp) {
+    const possibleBars = Array.from({ length: BAR_COUNT - 1 }, (_, index) => index + 1);
+    const barIndex = randomItem(possibleBars);
+    const noteIndex = randomIndex(bars[barIndex].length);
+    bars[barIndex][noteIndex] = {
+      ...bars[barIndex][noteIndex],
+      pitch: Math.random() < 0.5 ? "G#4" : "G#5",
+    };
+  }
+
+  return { key, bars };
+}
+
+// =====================================================
+// SPACING / ENGRAVING
+// =====================================================
+
+function getBarPositions(bar, startX, endX) {
+  const FIRST_NOTE_OFFSET = 14;
+  const EXTRA_ACCIDENTAL_UNITS = 1;
+  let accidentalShown = false;
+
+  const spacingItems = bar.map((item) => {
+    const isFirstAccidentalInBar = item.pitch.includes("#") && !accidentalShown;
+    if (item.pitch.includes("#")) accidentalShown = true;
+
+    return {
+      rhythmUnits: spacingValue(item.rhythm),
+      accidentalUnits: isFirstAccidentalInBar ? EXTRA_ACCIDENTAL_UNITS : 0,
+    };
+  });
+
+  const totalUnits = spacingItems.reduce((total, item) => total + item.rhythmUnits + item.accidentalUnits, 0);
+  const usableWidth = Math.max(1, endX - startX - FIRST_NOTE_OFFSET);
+  const unitWidth = usableWidth / Math.max(totalUnits, 1);
+  let cursor = startX + FIRST_NOTE_OFFSET;
+
+  return spacingItems.map((item) => {
+    cursor += item.accidentalUnits * unitWidth;
+    const x = cursor;
+    cursor += item.rhythmUnits * unitWidth;
+    return x;
+  });
+}
+
+function getStemData(x, y, step, stemDownOverride = null, forcedY = null) {
+  const stemDown = stemDownOverride ?? stemGoesDown(step);
+  const stemX = stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1;
+  const naturalY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH;
+
+  return {
+    stemDown,
+    stemX,
+    stemEndY: forcedY ?? naturalY,
+  };
+}
+
+function isQuaver(note) {
+  return note?.rhythm === "quaver";
+}
+
+function getQuaverGroupBounds(bar, index) {
+  if (!isQuaver(bar[index])) return null;
+
+  let start = index;
+  let end = index;
+
+  while (start > 0 && isQuaver(bar[start - 1])) start -= 1;
+  while (end < bar.length - 1 && isQuaver(bar[end + 1])) end += 1;
+
+  return end > start ? { start, end } : null;
+}
+
+function getBeamedGroupStemDown(bar, group) {
+  let upCount = 0;
+  let downCount = 0;
+
+  for (let index = group.start; index <= group.end; index += 1) {
+    const step = stepForNote(bar[index].pitch);
+    if (stemGoesDown(step)) downCount += 1;
+    else upCount += 1;
+  }
+
+  return downCount > upCount;
+}
+
+function getBeamAnchorStep(bar, group, stemDown) {
+  let anchorStep = stepForNote(bar[group.start].pitch);
+
+  for (let index = group.start; index <= group.end; index += 1) {
+    const step = stepForNote(bar[index].pitch);
+    if (stemDown ? step > anchorStep : step < anchorStep) {
+      anchorStep = step;
+    }
+  }
+
+  return anchorStep;
+}
+
+function groupChangesDirection(steps) {
+  const directions = [];
+
+  for (let index = 1; index < steps.length; index += 1) {
+    const direction = Math.sign(steps[index] - steps[index - 1]);
+    if (direction !== 0) directions.push(direction);
+  }
+
+  if (directions.length < 2) return false;
+  return directions.some((direction) => direction !== directions[0]);
+}
+
+function getBeamLineYAtX(x, start, end) {
+  if (!start || !end || start.x === end.x) return start?.y ?? end?.y ?? null;
+
+  const progress = (x - start.x) / (end.x - start.x);
+  return start.y + progress * (end.y - start.y);
+}
+
+function getBeamEnds(bar, group, positions, stemDown) {
+  const firstStep = stepForNote(bar[group.start].pitch);
+  const lastStep = stepForNote(bar[group.end].pitch);
+  const steps = [];
+
+  for (let index = group.start; index <= group.end; index += 1) {
+    steps.push(stepForNote(bar[index].pitch));
+  }
+
+  const shouldSlope = !groupChangesDirection(steps) && firstStep !== lastStep;
+  const totalSlope = shouldSlope ? Math.max(-8, Math.min(8, (lastStep - firstStep) * -2)) : 0;
+
+  let anchorIndex = group.start;
+  let anchorStep = stepForNote(bar[group.start].pitch);
+
+  for (let index = group.start; index <= group.end; index += 1) {
+    const step = stepForNote(bar[index].pitch);
+
+    if (stemDown) {
+      if (step > anchorStep) {
+        anchorStep = step;
+        anchorIndex = index;
+      }
+    } else if (step < anchorStep) {
+      anchorStep = step;
+      anchorIndex = index;
+    }
+  }
+
+  const startStep = stepForNote(bar[group.start].pitch);
+  const endStep = stepForNote(bar[group.end].pitch);
+  const startStem = getStemData(positions[group.start], yForStep(startStep), startStep, stemDown);
+  const endStem = getStemData(positions[group.end], yForStep(endStep), endStep, stemDown);
+  const anchorStem = getStemData(positions[anchorIndex], yForStep(anchorStep), anchorStep, stemDown);
+
+  const totalX = Math.max(1, endStem.stemX - startStem.stemX);
+  const slopePerX = totalSlope / totalX;
+
+  // The anchor note keeps its natural full stem length.
+  // Other stems extend or shorten to meet a beam line passing through that anchor point.
+  const startY = anchorStem.stemEndY - slopePerX * (anchorStem.stemX - startStem.stemX);
+  const endY = anchorStem.stemEndY + slopePerX * (endStem.stemX - anchorStem.stemX);
+
+  return {
+    start: { x: startStem.stemX, y: startY },
+    end: { x: endStem.stemX, y: endY },
+  };
+}
+
+// =====================================================
+// TESTS
+// =====================================================
+
+function runChecks() {
+  const allPatterns = [...STANDARD_BAR_PATTERNS, ...FINAL_BAR_PATTERNS];
+
+  console.assert(STAFF_LEFT === 20 && STAFF_RIGHT === 700, "Stave margins should be equal.");
+  console.assert(BAR_COUNT === 3, "Exercise should use three bars.");
+  console.assert(KEYS.length === 4, "There should be four answer choices.");
+  console.assert(allPatterns.every((pattern) => pattern.reduce((total, rhythm) => total + rhythmById(rhythm).beats, 0) === 4), "Every rhythm pattern should equal 4 beats.");
+  console.assert(!STANDARD_BAR_PATTERNS.some((pattern) => pattern.includes("semibreve")), "Semibreves should only appear in the final bar.");
+  console.assert(FINAL_BAR_PATTERNS.some((pattern) => pattern.length === 1 && pattern[0] === "semibreve"), "Final bar can contain a semibreve.");
+  console.assert(makeQuestion().bars.length === BAR_COUNT, "Generated questions should contain three bars.");
+}
+
+runChecks();
+
+// =====================================================
+// SVG COMPONENTS
+// =====================================================
+
+function StaffLines() {
+  return (
+    <g>
+      {[0, 1, 2, 3, 4].map((index) => (
+        <line
+          key={index}
+          x1={STAFF_LEFT}
+          x2={STAFF_RIGHT}
+          y1={TREBLE_TOP + index * LINE_GAP}
+          y2={TREBLE_TOP + index * LINE_GAP}
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+      ))}
+    </g>
+  );
+}
+
+function BarLines() {
+  const barWidth = (STAFF_RIGHT - MUSIC_START_X) / BAR_COUNT;
+  const barXs = Array.from({ length: BAR_COUNT }, (_, index) => {
+    return index === BAR_COUNT - 1 ? STAFF_RIGHT : MUSIC_START_X + barWidth * (index + 1);
+  });
+
+  return (
+    <g>
+      {barXs.map((x) => (
+        <line
+          key={x}
+          x1={x}
+          x2={x}
+          y1={TREBLE_TOP}
+          y2={TREBLE_TOP + LINE_GAP * 4}
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+      ))}
+    </g>
+  );
+}
+
+function LedgerLines({ x, step }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2));
+  if (step >= 10) lines.push(yForStep(10));
+
+  return (
+    <g>
+      {lines.map((lineY) => (
+        <line
+          key={lineY}
+          x1={x - 14}
+          x2={x + 14}
+          y1={lineY}
+          y2={lineY}
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+      ))}
+    </g>
+  );
+}
+
+function RhythmNote({ x, y, step, rhythm, accidental, showFlag, forcedStemEndY, stemDownOverride }) {
+  const isOpen = rhythm === "minim" || rhythm === "semibreve";
+  const hasStem = rhythm !== "semibreve";
+  const { stemDown, stemX, stemEndY } = getStemData(x, y, step, stemDownOverride, forcedStemEndY);
+  const isSpaceNote = Math.abs(step % 2) === 1;
+  const dotY = isSpaceNote ? y : y - 5;
+  const flagPath = stemDown
+    ? `M ${stemX} ${stemEndY} C ${stemX + 14} ${stemEndY - 6}, ${stemX + 13} ${stemEndY - 16}, ${stemX + 3} ${stemEndY - 20}`
+    : `M ${stemX} ${stemEndY} C ${stemX + 14} ${stemEndY + 6}, ${stemX + 13} ${stemEndY + 16}, ${stemX + 3} ${stemEndY + 20}`;
+
+  return (
+    <g pointerEvents="none">
+      {accidental && (
+        <text x={x - 20} y={y + 7} fontSize="21" fontFamily="serif" fontWeight="700">
+          ♯
+        </text>
+      )}
+
+      <ellipse
+        cx={x}
+        cy={y}
+        rx={NOTE_RX}
+        ry={NOTE_RY}
+        transform={`rotate(-18 ${x} ${y})`}
+        fill={isOpen ? "transparent" : "currentColor"}
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+
+      {hasStem && <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke="currentColor" strokeWidth="1.6" />}
+
+      {rhythm === "dotted-crotchet" && <circle cx={x + 15} cy={dotY} r="2.2" fill="currentColor" />}
+
+      {rhythm === "quaver" && showFlag && <path d={flagPath} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+    </g>
+  );
+}
+
+function Beam({ start, end }) {
+  if (!start || !end) return null;
+
+  return (
+    <line
+      x1={start.x}
+      y1={start.y}
+      x2={end.x}
+      y2={end.y}
+      stroke="currentColor"
+      strokeWidth="4"
+      strokeLinecap="butt"
+      pointerEvents="none"
+    />
+  );
+}
+
+function KeySignature({ signature }) {
+  if (signature === "sharp") {
+    return (
+      <text x={KEY_SIG_X + 2} y={yForStep(8) + 8} fontSize="28" fontFamily="serif" fontWeight="900">
+        ♯
+      </text>
+    );
+  }
+
+  if (signature === "flat") {
+    return (
+      <text x={KEY_SIG_X - 6} y={yForStep(4) + 6} fontSize="27" fontFamily="serif" fontWeight="900">
+        ♭
+      </text>
+    );
+  }
+
+  return null;
+}
+
+function TimeSignature() {
+  return (
+    <g fontFamily="serif" fontWeight="900" fontSize="36" textAnchor="middle">
+      <text x={TIME_SIG_X} y={TREBLE_TOP + 24}>4</text>
+      <text x={TIME_SIG_X} y={TREBLE_TOP + 44}>4</text>
+    </g>
+  );
+}
+
+function Passage({ bars }) {
+  const barWidth = (STAFF_RIGHT - MUSIC_START_X) / BAR_COUNT;
+
+  return (
+    <g>
+      {bars.map((bar, barIndex) => {
+        const startX = MUSIC_START_X + barIndex * barWidth + 5;
+        const endX = MUSIC_START_X + (barIndex + 1) * barWidth - 5;
+        const positions = getBarPositions(bar, startX, endX);
+        let accidentalAlreadyShown = false;
+
+        return (
+          <g key={`bar-${barIndex}`}>
+            {bar.map((note, noteIndex) => {
+              const x = positions[noteIndex];
+              const step = stepForNote(note.pitch);
+              const y = yForStep(step);
+              const group = getQuaverGroupBounds(bar, noteIndex);
+              const beamed = Boolean(group);
+              const groupStemDown = group ? getBeamedGroupStemDown(bar, group) : null;
+              let beamStart = null;
+              let beamEnd = null;
+              let forcedStemEndY = null;
+
+              if (group) {
+                const beamEnds = getBeamEnds(bar, group, positions, groupStemDown);
+                const currentStem = getStemData(x, y, step, groupStemDown);
+                beamStart = beamEnds.start;
+                beamEnd = beamEnds.end;
+                forcedStemEndY = getBeamLineYAtX(currentStem.stemX, beamStart, beamEnd);
+              }
+
+              const shouldShowAccidental = note.pitch.includes("#") && !accidentalAlreadyShown;
+              if (note.pitch.includes("#")) accidentalAlreadyShown = true;
+
+              return (
+                <g key={`${barIndex}-${noteIndex}`}>
+                  <LedgerLines x={x} step={step} />
+                  <RhythmNote
+                    x={x}
+                    y={y}
+                    step={step}
+                    rhythm={note.rhythm}
+                    accidental={shouldShowAccidental ? "sharp" : null}
+                    showFlag={!beamed}
+                    forcedStemEndY={forcedStemEndY}
+                    stemDownOverride={groupStemDown}
+                  />
+                  {note.rhythm === "quaver" && group?.start === noteIndex && group.end > noteIndex && <Beam start={beamStart} end={beamEnd} />}
+                </g>
+              );
+            })}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+// =====================================================
+// UI COMPONENTS
+// =====================================================
+
+function HelpMessage({ keyId }) {
+  if (keyId === "c-major") {
+    return (
+      <p>
+        I <span style={{ fontWeight: "700", textDecoration: "underline" }}>C</span> nothing.
+      </p>
+    );
+  }
+
+  if (keyId === "a-minor") {
+    return <p>It sounds dark, angry or sad.</p>;
+  }
+
+  if (keyId === "f-major") {
+    return (
+      <p>
+        The key signature has a <span style={{ fontWeight: "700", textDecoration: "underline" }}>f</span>lat.
+      </p>
+    );
+  }
+
+  if (keyId === "g-major") {
+    return (
+      <p>
+        The key signature has a hashta<span style={{ fontWeight: "700", textDecoration: "underline" }}>G</span>
+      </p>
+    );
+  }
+
+  return null;
+}
+
+function AnswerOptions({ selectedAnswer, disabled, onSelect }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+      {KEYS.map((key) => (
+        <button
+          key={key.id}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect(key.id)}
+          className={`rounded-xl border px-4 py-3 font-semibold ${
+            selectedAnswer === key.id ? "bg-stone-950 text-white border-stone-950" : "border-stone-300 hover:bg-stone-100"
+          }`}
+        >
+          {key.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// =====================================================
+// APP
+// =====================================================
+
+export default function KeySignatureIdentifier() {
+  const timeoutRef = useRef(null);
+  const [mode, setMode] = useState("exam");
+  const [question, setQuestion] = useState(() => makeQuestion());
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+
+  function clearTimer() {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
+
+  function nextQuestion() {
+    clearTimer();
+    setQuestion(makeQuestion());
+    setSelectedAnswer(null);
+    setFeedback(null);
+    setShowHelp(false);
+  }
+
+  function selectAnswer(answerId) {
+    if (feedback) return;
+
+    const isCorrect = answerId === question.key.id;
+    const newStreak = isCorrect ? streak + 1 : 0;
+
+    setSelectedAnswer(answerId);
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(newStreak);
+    setBestStreak((value) => Math.max(value, newStreak));
+    setFeedback(isCorrect ? "correct" : "incorrect");
+    setShowHelp(false);
+
+    clearTimer();
+    timeoutRef.current = window.setTimeout(nextQuestion, 2000);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    nextQuestion();
+  }
+
+  function changeMode(nextMode) {
+    clearTimer();
+    setMode(nextMode);
+    setQuestion(makeQuestion());
+    setSelectedAnswer(null);
+    setFeedback(null);
+    setShowHelp(false);
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Key Signatures</h1>
+              <p className="mt-2 text-stone-700">Identify the key signature from the music shown.</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center min-w-[280px]">
+              <div className="rounded-xl border bg-stone-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-stone-500">Score</div>
+                <div className="text-xl font-semibold">{correct}/{attempted}</div>
+              </div>
+              <div className="rounded-xl border bg-stone-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-stone-500">Accuracy</div>
+                <div className="text-xl font-semibold">{accuracy}%</div>
+              </div>
+              <div className="rounded-xl border bg-stone-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-stone-500">Streak</div>
+                <div className="text-xl font-semibold">{streak}</div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
+          <div className="mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => changeMode("practice")}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                  mode === "practice" ? "bg-stone-950 text-white border-stone-950" : "bg-white border-stone-300 hover:bg-stone-100"
+                }`}
+              >
+                Practice
+              </button>
+              <button
+                type="button"
+                onClick={() => changeMode("exam")}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                  mode === "exam" ? "bg-stone-950 text-white border-stone-950" : "bg-white border-stone-300 hover:bg-stone-100"
+                }`}
+              >
+                Exam Style Questions
+              </button>
+            </div>
+
+            <div className="flex justify-end items-center gap-2">
+            {showHelp && (
+              <div className="mr-2 w-64 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-950 shadow">
+                <HelpMessage keyId={question.key.id} />
+              </div>
+            )}
+
+            <button
+              type="button"
+              title="Help"
+              aria-label="Help"
+              onClick={() => setShowHelp((value) => !value)}
+              className={`h-10 w-10 rounded-full border text-lg font-bold ${
+                showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"
+              }`}
+            >
+              ?
+            </button>
+
+            <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">
+              Reset score
+            </button>
+          </div>
+          </div>
+
+          <AnswerOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectAnswer} />
+
+          <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none" aria-label="Key signature identification exercise">
+              <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
+              {mode === "practice" ? (
+                <g>
+                  {(() => {
+                    const centerX = VIEWBOX_WIDTH / 2;
+                    const staffWidth = 360;
+                    const left = centerX - staffWidth / 2;
+                    const right = centerX + staffWidth / 2;
+
+                    return (
+                      <>
+                        {/* short centred staff */}
+                        {[0,1,2,3,4].map(i => (
+                          <line
+                            key={i}
+                            x1={left}
+                            x2={right}
+                            y1={TREBLE_TOP + i * (LINE_GAP * 2)}
+                            y2={TREBLE_TOP + i * (LINE_GAP * 2)}
+                            stroke="currentColor"
+                            strokeWidth="1.2"
+                          />
+                        ))}
+
+                        {/* centred clef */}
+                        <text
+                          x={centerX - 150}
+                          y={TREBLE_TOP + 66}
+                          fontSize="180"
+                          fontFamily="serif"
+                          dominantBaseline="middle"
+                        >
+                          {TREBLE_CLEF}
+                        </text>
+
+                        {/* centred key signature */}
+                        <g transform={`translate(${centerX - 70}, ${TREBLE_TOP}) scale(2) translate(${-KEY_SIG_X}, ${-TREBLE_TOP})`}>
+                          <KeySignature signature={question.key.signature} />
+                        </g>
+
+                        {question.key.id === "a-minor" && (
+                          <g transform={`translate(${centerX + 70}, 0) scale(2) translate(${-centerX - 70}, 0)`}>
+                            <LedgerLines x={centerX + 70} step={stepForNote("G4")} />
+                            <RhythmNote
+                              x={centerX + 70}
+                              y={yForStep(stepForNote("G4")) - 60}
+                              step={stepForNote("G4")}
+                              rhythm="crotchet"
+                              accidental="sharp"
+                              showFlag={false}
+                              forcedStemEndY={null}
+                              stemDownOverride={null}
+                            />
+                          </g>
+                        )}
+                      </>
+                    );
+                  })()}
+                </g>
+              ) : (
+                <>
+                  <StaffLines />
+                  <BarLines />
+                  <text x={CLEF_X} y={TREBLE_TOP + 33} fontSize="90" fontFamily="serif" dominantBaseline="middle">
+                    {TREBLE_CLEF}
+                  </text>
+                  <KeySignature signature={question.key.signature} />
+                  <TimeSignature />
+                  <Passage bars={question.bars} />
+                </>
+              )}
+            </svg>
+          </div>
+
+          <div className="mt-5 min-h-[54px] rounded-xl border border-stone-200 bg-stone-50 p-4">
+            {!feedback && <p className="text-stone-700">Choose the correct key.</p>}
+            {feedback && (
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`font-semibold ${feedback === "correct" ? "text-green-700" : "text-red-700"}`}>
+                {feedback === "correct" ? `${TICK} Correct` : `${CROSS} Incorrect`}
+              </motion.p>
+            )}
+          </div>
+
+          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
