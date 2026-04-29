@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intervals</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useMemo, useRef, useState } = React;
+
+const VIEWBOX_WIDTH = 720;
+const VIEWBOX_HEIGHT = 300;
+const STAFF_LEFT = 110;
+const STAFF_RIGHT = 610;
+const TREBLE_TOP = 118;
+const LINE_GAP = 16;
+const NOTE_RX = 11;
+const NOTE_RY = 7.8;
+const STEM_LENGTH = 50;
+
+const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const NOTES = [
+  { name: "C4", step: -2 },
+  { name: "D4", step: -1 },
+  { name: "E4", step: 0 },
+  { name: "F4", step: 1 },
+  { name: "G4", step: 2 },
+  { name: "A4", step: 3 },
+  { name: "B4", step: 4 },
+  { name: "C5", step: 5 },
+  { name: "D5", step: 6 },
+  { name: "E5", step: 7 },
+  { name: "F5", step: 8 },
+  { name: "G5", step: 9 },
+  { name: "A5", step: 10 },
+];
+
+const INTERVALS = [
+  { size: 2, label: "2nd" },
+  { size: 3, label: "3rd" },
+  { size: 4, label: "4th" },
+  { size: 5, label: "5th" },
+  { size: 6, label: "6th" },
+  { size: 7, label: "7th" },
+  { size: 8, label: "Octave" },
+];
+
+function randomIndex(length) {
+  return Math.floor(Math.random() * length);
+}
+
+function randomItem(items) {
+  return items[randomIndex(items.length)];
+}
+
+function noteByIndex(index) {
+  return NOTES[Math.max(0, Math.min(NOTES.length - 1, index))];
+}
+
+function intervalLabel(size) {
+  return INTERVALS.find((interval) => interval.size === size)?.label ?? `${size}th`;
+}
+
+function yForStep(step) {
+  const bottomLineY = TREBLE_TOP + LINE_GAP * 4;
+  return bottomLineY - step * (LINE_GAP / 2);
+}
+
+function stemGoesDown(step) {
+  return step > 4;
+}
+
+function getStepFromMouseY(clientY, rect) {
+  const svgY = ((clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT;
+  const bottomLineY = TREBLE_TOP + LINE_GAP * 4;
+  const rawStep = Math.round((bottomLineY - svgY) / (LINE_GAP / 2));
+  return Math.max(NOTES[0].step, Math.min(NOTES[NOTES.length - 1].step, rawStep));
+}
+
+function makeIdentifyQuestion() {
+  const interval = randomItem(INTERVALS);
+  const distance = interval.size - 1;
+  const direction = Math.random() < 0.5 ? "higher" : "lower";
+  const possibleStarts = NOTES.map((_, index) => index).filter((index) => {
+    return direction === "higher" ? index + distance < NOTES.length : index - distance >= 0;
+  });
+  const startIndex = randomItem(possibleStarts);
+  const endIndex = direction === "higher" ? startIndex + distance : startIndex - distance;
+
+  return {
+    type: "identify",
+    startIndex,
+    endIndex,
+    intervalSize: interval.size,
+    direction,
+  };
+}
+
+function makeCreateQuestion() {
+  const validQuestions = [];
+
+  INTERVALS.forEach((interval) => {
+    const distance = interval.size - 1;
+
+    NOTES.forEach((_, startIndex) => {
+      if (startIndex + distance < NOTES.length) {
+        validQuestions.push({
+          type: "create",
+          startIndex,
+          targetIndex: startIndex + distance,
+          intervalSize: interval.size,
+          direction: "higher",
+        });
+      }
+
+      if (startIndex - distance >= 0) {
+        validQuestions.push({
+          type: "create",
+          startIndex,
+          targetIndex: startIndex - distance,
+          intervalSize: interval.size,
+          direction: "lower",
+        });
+      }
+    });
+  });
+
+  return randomItem(validQuestions);
+}
+
+function makeQuestion(mode) {
+  return mode === "create" ? makeCreateQuestion() : makeIdentifyQuestion();
+}
+
+function StaffLines() {
+  return (
+    <g>
+      {[0, 1, 2, 3, 4].map((index) => (
+        <line
+          key={index}
+          x1={STAFF_LEFT}
+          x2={STAFF_RIGHT}
+          y1={TREBLE_TOP + index * LINE_GAP}
+          y2={TREBLE_TOP + index * LINE_GAP}
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+      ))}
+    </g>
+  );
+}
+
+function LedgerLines({ x, step, colour = "currentColor" }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2));
+  if (step >= 10) lines.push(yForStep(10));
+
+  return (
+    <g>
+      {lines.map((lineY) => (
+        <line key={lineY} x1={x - 18} x2={x + 18} y1={lineY} y2={lineY} stroke={colour} strokeWidth="1.4" />
+      ))}
+    </g>
+  );
+}
+
+function Notehead({ x, note, ghost = false, colour = "currentColor" }) {
+  const y = yForStep(note.step);
+  const stemDown = stemGoesDown(note.step);
+  const stemX = stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1;
+  const stemEndY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH;
+
+  return (
+    <g opacity={ghost ? 0.55 : 1}>
+      <LedgerLines x={x} step={note.step} colour={colour} />
+      <ellipse
+        cx={x}
+        cy={y}
+        rx={NOTE_RX}
+        ry={NOTE_RY}
+        transform={`rotate(-18 ${x} ${y})`}
+        fill={colour}
+        stroke={colour}
+        strokeWidth="1.8"
+      />
+      <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.8" />
+    </g>
+  );
+}
+
+function TrebleClef() {
+  return (
+    <text x={STAFF_LEFT + 16} y={TREBLE_TOP + 44} fontSize="139" fontFamily="serif" dominantBaseline="middle">
+      {TREBLE_CLEF}
+    </text>
+  );
+}
+
+function IntervalHelpNumbers({ question, startX, secondX }) {
+  const noteCount = Math.abs(question.endIndex - question.startIndex) + 1;
+  const direction = question.endIndex >= question.startIndex ? 1 : -1;
+  const totalDistance = Math.max(1, Math.abs(question.endIndex - question.startIndex));
+
+  return (
+    <g fontSize="20" fontWeight="800" fill="red" opacity="0.5">
+      {Array.from({ length: noteCount }, (_, countIndex) => {
+        const noteIndex = question.startIndex + countIndex * direction;
+        const note = noteByIndex(noteIndex);
+        const x = startX + ((secondX - startX) * countIndex) / totalDistance;
+
+        return (
+          <text key={`${note.name}-${countIndex}`} x={x + 22} y={yForStep(note.step) + 7} textAnchor="middle">
+            {countIndex + 1}
+          </text>
+        );
+      })}
+    </g>
+  );
+}
+
+function IntervalNotation({ question, mode, hoverIndex, selectedIndex, onHoverIndex, onSelectIndex, feedback, showHelp }) {
+  const startNote = noteByIndex(question.startIndex);
+  const identifyEndNote = question.type === "identify" ? noteByIndex(question.endIndex) : null;
+  const workingIndex = selectedIndex ?? hoverIndex;
+  const workingNote = mode === "create" && workingIndex !== null ? noteByIndex(workingIndex) : null;
+  const correctCreateNote = mode === "create" ? noteByIndex(question.targetIndex) : null;
+  const showCreateCorrection = mode === "create" && feedback === "incorrect" && selectedIndex !== null;
+  const createHelpNumber = mode === "create" && showHelp && workingIndex !== null ? Math.abs(workingIndex - question.startIndex) + 1 : null;
+
+  const startX = mode === "identify" ? 285 : 315;
+  const secondX = mode === "identify" ? 435 : 445;
+
+  function handleMouseMove(event) {
+    if (mode !== "create" || feedback) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const step = getStepFromMouseY(event.clientY, rect);
+    const index = NOTES.findIndex((note) => note.step === step);
+
+    if (index !== -1) onHoverIndex(index);
+  }
+
+  function handleClick() {
+    if (mode !== "create" || hoverIndex === null || feedback) return;
+    onSelectIndex(hoverIndex);
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+      className="w-full h-auto select-none"
+      aria-label="Interval exercise"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => mode === "create" && !feedback && onHoverIndex(null)}
+      onClick={handleClick}
+    >
+      <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
+      <StaffLines />
+      <TrebleClef />
+      <Notehead x={startX} note={startNote} />
+
+      {mode === "identify" && identifyEndNote && <Notehead x={secondX} note={identifyEndNote} />}
+      {mode === "identify" && showHelp && <IntervalHelpNumbers question={question} startX={startX} secondX={secondX} />}
+
+      {mode === "create" && workingNote && !showCreateCorrection && <Notehead x={secondX} note={workingNote} ghost={selectedIndex === null} />}
+      {showCreateCorrection && <Notehead x={secondX - 26} note={noteByIndex(selectedIndex)} colour="#b91c1c" />}
+      {showCreateCorrection && correctCreateNote && <Notehead x={secondX + 26} note={correctCreateNote} colour="#15803d" />}
+
+      {createHelpNumber !== null && workingNote && !showCreateCorrection && (
+        <text
+          x={secondX + 30}
+          y={yForStep(workingNote.step) + 7}
+          fontSize="20"
+          fontWeight="800"
+          fill="red"
+          opacity="0.5"
+          textAnchor="middle"
+        >
+          {createHelpNumber}
+        </text>
+      )}
+    </svg>
+  );
+}
+
+function AnswerOptions({ disabled, selectedAnswer, onSelect }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-7 gap-2 mb-4">
+      {INTERVALS.map((interval) => (
+        <button
+          key={interval.size}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect(interval.size)}
+          className={`rounded-xl border px-4 py-3 font-semibold ${
+            selectedAnswer === interval.size ? "bg-stone-950 text-white border-stone-950" : "border-stone-300 hover:bg-stone-100"
+          }`}
+        >
+          {interval.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-xl border bg-stone-50 p-3 text-center">
+      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function Feedback({ feedback, mode, correctAnswerText }) {
+  if (!feedback) return null;
+
+  return (
+    <div className="mt-5 flex min-h-[64px] items-center justify-center p-4">
+      <div className={`text-center font-semibold ${feedback === "correct" ? "text-green-700" : "text-red-700"}`}>
+        <p>{feedback === "correct" ? `${TICK} Correct` : `${CROSS} Incorrect`}</p>
+        {feedback === "incorrect" && mode === "identify" && <p className="mt-1 text-base font-semibold text-green-700">{correctAnswerText}</p>}
+      </div>
+    </div>
+  );
+}
+
+function IntervalTrainer() {
+  const timeoutRef = useRef(null);
+  const [mode, setMode] = useState("identify");
+  const [question, setQuestion] = useState(() => makeQuestion("identify"));
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [hoverIndex, setHoverIndex] = useState(null);
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+
+  const promptText = useMemo(() => {
+    if (mode === "identify") return "Identify the interval shown.";
+
+    const label = intervalLabel(question.intervalSize).toLowerCase();
+    const article = label === "octave" ? "an" : "a";
+
+    return (
+      <>
+        Create an interval {article} <strong>{label}</strong> <strong>{question.direction}</strong> than the note given.
+      </>
+    );
+  }, [mode, question]);
+
+  const correctAnswerText = mode === "identify" ? intervalLabel(question.intervalSize) : noteByIndex(question.targetIndex).name;
+
+  function clearTimer() {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
+
+  function nextQuestion(nextMode = mode) {
+    clearTimer();
+    setQuestion(makeQuestion(nextMode));
+    setSelectedAnswer(null);
+    setHoverIndex(null);
+    setSelectedIndex(null);
+    setFeedback(null);
+  }
+
+  function recordAnswer(isCorrect, answerValue = null) {
+    const newStreak = isCorrect ? streak + 1 : 0;
+
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(newStreak);
+    setBestStreak((value) => Math.max(value, newStreak));
+    setFeedback(isCorrect ? "correct" : "incorrect");
+
+    if (answerValue !== null) setSelectedAnswer(answerValue);
+
+    clearTimer();
+    timeoutRef.current = window.setTimeout(() => nextQuestion(), 2000);
+  }
+
+  function selectInterval(intervalSize) {
+    if (feedback || mode !== "identify") return;
+    recordAnswer(intervalSize === question.intervalSize, intervalSize);
+  }
+
+  function confirmCreatedInterval() {
+    if (feedback || mode !== "create" || selectedIndex === null) return;
+    recordAnswer(selectedIndex === question.targetIndex);
+  }
+
+  function moveSelected(direction) {
+    if (feedback || mode !== "create") return;
+
+    const current = selectedIndex ?? hoverIndex ?? question.startIndex;
+    const next = Math.max(0, Math.min(NOTES.length - 1, current + direction));
+    setSelectedIndex(next);
+    setHoverIndex(next);
+  }
+
+  function changeMode(nextMode) {
+    clearTimer();
+    setMode(nextMode);
+    setQuestion(makeQuestion(nextMode));
+    setSelectedAnswer(null);
+    setHoverIndex(null);
+    setSelectedIndex(null);
+    setFeedback(null);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    nextQuestion();
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Intervals</h1>
+              <p className="mt-2 text-stone-700">Identify and create intervals.</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 min-w-[280px]">
+              <StatCard label="Score" value={`${correct}/${attempted}`} />
+              <StatCard label="Accuracy" value={`${accuracy}%`} />
+              <StatCard label="Streak" value={streak} />
+            </div>
+          </div>
+        </header>
+
+        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
+          <div className="mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => changeMode("identify")}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "identify" ? "bg-stone-950 text-white border-stone-950" : "bg-white border-stone-300 hover:bg-stone-100"}`}
+              >
+                Identify the Interval
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeMode("create")}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "create" ? "bg-stone-950 text-white border-stone-950" : "bg-white border-stone-300 hover:bg-stone-100"}`}
+              >
+                Create the Interval
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title="Help"
+                aria-label="Help"
+                onClick={() => setShowHelp((value) => !value)}
+                className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}
+              >
+                ?
+              </button>
+
+              <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">
+                Reset score
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4 font-semibold text-stone-800">{promptText}</div>
+
+          {mode === "identify" && <AnswerOptions disabled={Boolean(feedback)} selectedAnswer={selectedAnswer} onSelect={selectInterval} />}
+
+          <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white">
+            {mode === "create" && (
+              <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={Boolean(feedback)}
+                  onClick={() => moveSelected(1)}
+                  className="h-11 w-11 rounded-full border border-stone-300 bg-white text-xl font-bold shadow hover:bg-stone-100 disabled:opacity-40"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(feedback)}
+                  onClick={() => moveSelected(-1)}
+                  className="h-11 w-11 rounded-full border border-stone-300 bg-white text-xl font-bold shadow hover:bg-stone-100 disabled:opacity-40"
+                >
+                  ↓
+                </button>
+              </div>
+            )}
+
+            <IntervalNotation
+              question={question}
+              mode={mode}
+              hoverIndex={hoverIndex}
+              selectedIndex={selectedIndex}
+              onHoverIndex={setHoverIndex}
+              onSelectIndex={setSelectedIndex}
+              feedback={feedback}
+              showHelp={showHelp}
+            />
+          </div>
+
+          {mode === "create" && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                disabled={Boolean(feedback) || selectedIndex === null}
+                onClick={confirmCreatedInterval}
+                className="rounded-xl bg-stone-950 px-8 py-3 font-semibold text-white disabled:opacity-40"
+              >
+                Confirm
+              </button>
+            </div>
+          )}
+
+          <Feedback feedback={feedback} mode={mode} correctAnswerText={correctAnswerText} />
+
+          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<IntervalTrainer />);
+</script>
+</body>
+</html>
