@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Time Signatures</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useRef, useState } = React;
+
+
+// =====================================================
+// Time Signatures
+// Clean React rebuild
+// =====================================================
+
+const VIEWBOX_WIDTH = 920;
+const VIEWBOX_HEIGHT = 430;
+const STAFF_LEFT = 24;
+const STAFF_RIGHT = 896;
+const SYSTEM_TOPS = [112, 262];
+const LINE_GAP = 10;
+const NOTE_RX = 6.3;
+const NOTE_RY = 4.6;
+const STEM_LENGTH = 32;
+const BAR_COUNT = 8;
+const BARS_PER_SYSTEM = 4;
+
+const CLEF_X = STAFF_LEFT + 8;
+const TIME_SIG_X = STAFF_LEFT + 54;
+const FIRST_SYSTEM_MUSIC_START_X = STAFF_LEFT + 70;
+const OTHER_SYSTEM_MUSIC_START_X = STAFF_LEFT + 70;
+
+const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const NOTES = [
+  { name: "C4", step: -2 },
+  { name: "D4", step: -1 },
+  { name: "E4", step: 0 },
+  { name: "F4", step: 1 },
+  { name: "G4", step: 2 },
+  { name: "A4", step: 3 },
+  { name: "B4", step: 4 },
+  { name: "C5", step: 5 },
+  { name: "D5", step: 6 },
+  { name: "E5", step: 7 },
+  { name: "F5", step: 8 },
+  { name: "G5", step: 9 },
+  { name: "A5", step: 10 },
+];
+
+const TIME_SIGNATURES = [
+  { id: "2/4", top: "2", bottom: "4", type: "simple", beatsPerBar: 2 },
+  { id: "3/4", top: "3", bottom: "4", type: "simple", beatsPerBar: 3 },
+  { id: "4/4", top: "4", bottom: "4", type: "simple", beatsPerBar: 4 },
+  { id: "6/8", top: "6", bottom: "8", type: "compound", beatsPerBar: 3, compoundGroups: 2 },
+  { id: "9/8", top: "9", bottom: "8", type: "compound", beatsPerBar: 4.5, compoundGroups: 3 },
+  { id: "12/8", top: "12", bottom: "8", type: "compound", beatsPerBar: 6, compoundGroups: 4 },
+];
+
+const SIMPLE_PATTERNS_BY_LENGTH = {
+  2: [
+    ["minim"],
+    ["crotchet", "crotchet"],
+    ["quaver", "quaver", "crotchet"],
+    ["crotchet", "quaver", "quaver"],
+    ["quaver", "quaver", "quaver", "quaver"],
+    ["dotted-crotchet", "quaver"],
+    ["dotted-crotchet", "quaver"],
+    ["dotted-crotchet", "quaver"],
+    ["quaver", "dotted-crotchet"],
+    ["semiquaver-group-4", "crotchet"],
+    ["quaver-2semiquavers", "crotchet"],
+    ["2semiquavers-quaver", "crotchet"],
+    ["dotted-quaver-semiquaver", "crotchet"],
+  ],
+  3: [
+    ["dotted-minim"],
+    ["minim", "crotchet"],
+    ["crotchet", "minim"],
+    ["crotchet", "crotchet", "crotchet"],
+    ["quaver", "quaver", "crotchet", "crotchet"],
+    ["crotchet", "quaver", "quaver", "crotchet"],
+    ["crotchet", "crotchet", "quaver", "quaver"],
+    ["quaver", "quaver", "quaver", "quaver", "crotchet"],
+    ["crotchet", "quaver", "quaver", "quaver", "quaver"],
+    ["semiquaver-group-4", "crotchet", "crotchet"],
+    ["crotchet", "quaver-2semiquavers", "crotchet"],
+    ["crotchet", "crotchet", "2semiquavers-quaver"],
+    ["dotted-quaver-semiquaver", "crotchet", "crotchet"],
+  ],
+  4: [
+    ["minim", "minim"],
+    ["minim", "crotchet", "crotchet"],
+    ["crotchet", "crotchet", "minim"],
+    ["crotchet", "crotchet", "crotchet", "crotchet"],
+    ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
+    ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
+    ["crotchet", "crotchet", "quaver", "quaver", "crotchet"],
+    ["crotchet", "crotchet", "crotchet", "quaver", "quaver"],
+    ["quaver", "quaver", "quaver", "quaver", "minim"],
+    ["minim", "quaver", "quaver", "quaver", "quaver"],
+    ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
+    ["semiquaver-group-4", "crotchet", "crotchet", "crotchet"],
+    ["crotchet", "quaver-2semiquavers", "crotchet", "crotchet"],
+    ["crotchet", "crotchet", "2semiquavers-quaver", "crotchet"],
+    ["crotchet", "crotchet", "crotchet", "dotted-quaver-semiquaver"],
+  ],
+};
+
+const RHYTHM_INFO = {
+  semibreve: { beats: 4, spacing: 8, open: true, stem: false, dots: 0 },
+  "dotted-minim": { beats: 3, spacing: 6, open: true, stem: true, dots: 1 },
+  minim: { beats: 2, spacing: 4, open: true, stem: true, dots: 0 },
+  "dotted-crotchet": { beats: 1.5, spacing: 3, open: false, stem: true, dots: 1 },
+  crotchet: { beats: 1, spacing: 2.2, open: false, stem: true, dots: 0 },
+  quaver: { beats: 0.5, spacing: 1.15, open: false, stem: true, dots: 0, flag: true, beams: 1 },
+  "dotted-quaver": { beats: 0.75, spacing: 1.5, open: false, stem: true, dots: 1, flag: true, beams: 1 },
+  semiquaver: { beats: 0.25, spacing: 0.72, open: false, stem: true, dots: 0, flag: true, beams: 2 },
+  "quaver-rest": { beats: 0.5, spacing: 1.15, rest: true },
+  "crotchet-rest": { beats: 1, spacing: 2.2, rest: true },
+  "dotted-crotchet-rest": { beats: 1.5, spacing: 3, rest: true },
+};
+
+function randomIndex(length) {
+  return Math.floor(Math.random() * length);
+}
+
+function randomItem(items) {
+  return items[randomIndex(items.length)];
+}
+
+function rhythmInfo(rhythm) {
+  return RHYTHM_INFO[rhythm] ?? RHYTHM_INFO.crotchet;
+}
+
+function noteByIndex(index) {
+  return NOTES[Math.max(0, Math.min(NOTES.length - 1, index))];
+}
+
+function yForStep(step, systemTop) {
+  const bottomLineY = systemTop + LINE_GAP * 4;
+  return bottomLineY - step * (LINE_GAP / 2);
+}
+
+function stemGoesDown(step) {
+  return step > 4;
+}
+
+function nearestMelodicIndex(previousIndex, stepwiseNoRepeat = false) {
+  if (!stepwiseNoRepeat) {
+    const movement = randomItem([-2, -1, 0, 0, 1, 2]);
+    return Math.max(0, Math.min(NOTES.length - 1, previousIndex + movement));
+  }
+
+  if (previousIndex <= 0) return 1;
+  if (previousIndex >= NOTES.length - 1) return NOTES.length - 2;
+  return previousIndex + randomItem([-1, 1]);
+}
+
+function makeCompoundRhythms(timeSignature, barIndex) {
+  if (barIndex === BAR_COUNT - 1 && timeSignature.id === "6/8" && Math.random() < 0.45) {
+    return ["dotted-minim"];
+  }
+
+  const groups = Array.from({ length: timeSignature.compoundGroups }, () => "dotted-crotchet");
+
+  if (Math.random() < 0.22) {
+    groups[randomIndex(groups.length)] = "dotted-crotchet-rest";
+  }
+
+  if (Math.random() < 0.5) {
+    const available = groups.map((group, index) => ({ group, index })).filter((item) => item.group === "dotted-crotchet");
+    if (available.length > 0) groups[randomItem(available).index] = "quaver-group-3";
+  }
+
+  if (Math.random() < 0.4) {
+    const available = groups.map((group, index) => ({ group, index })).filter((item) => item.group === "dotted-crotchet");
+    if (available.length > 0) {
+      const chosen = randomItem(available).index;
+      groups[chosen] = Math.random() < 0.75 ? "crotchet-quaver" : "quaver-crotchet";
+    }
+  }
+
+  return groups;
+}
+
+function applyRareSimpleRests(pattern) {
+  if (Math.random() > 0.35) return pattern;
+  if (pattern.some((rhythm) => rhythm.includes("semiquaver"))) return pattern;
+
+  const result = [...pattern];
+
+  for (let index = 0; index <= result.length - 4; index += 1) {
+    const fourQuavers = result.slice(index, index + 4).every((rhythm) => rhythm === "quaver");
+    if (!fourQuavers) continue;
+
+    if (Math.random() < 0.7) {
+      result[index + randomIndex(4)] = "quaver-rest";
+      return result;
+    }
+
+    return Math.random() < 0.5
+      ? [...result.slice(0, index), "crotchet-rest", "quaver", "quaver", ...result.slice(index + 4)]
+      : [...result.slice(0, index), "quaver", "quaver", "crotchet-rest", ...result.slice(index + 4)];
+  }
+
+  const crotchetIndexes = result.map((rhythm, index) => (rhythm === "crotchet" ? index : -1)).filter((index) => index >= 0);
+  if (crotchetIndexes.length > 0 && Math.random() < 0.6) {
+    result[randomItem(crotchetIndexes)] = "crotchet-rest";
+    return result;
+  }
+
+  for (let index = 0; index <= result.length - 2; index += 1) {
+    if (result[index] === "quaver" && result[index + 1] === "quaver") {
+      result[index + randomIndex(2)] = "quaver-rest";
+      return result;
+    }
+  }
+
+  return result;
+}
+
+function makeSimpleRhythms(timeSignature, barIndex) {
+  const patterns = SIMPLE_PATTERNS_BY_LENGTH[timeSignature.beatsPerBar] ?? [["crotchet"]];
+  const semiquaverPatterns = patterns.filter((pattern) => pattern.some((rhythm) => rhythm.includes("semiquaver")));
+  const regularPatterns = patterns.filter((pattern) => !pattern.some((rhythm) => rhythm.includes("semiquaver")));
+  const pool = semiquaverPatterns.length > 0 && Math.random() < 0.16 ? semiquaverPatterns : regularPatterns;
+
+  const chosen = timeSignature.beatsPerBar === 4 && barIndex === BAR_COUNT - 1
+    ? randomItem([["semibreve"], ...pool])
+    : randomItem(pool);
+
+  return applyRareSimpleRests(chosen);
+}
+
+function makeBarRhythms(timeSignature, barIndex) {
+  return timeSignature.type === "compound" ? makeCompoundRhythms(timeSignature, barIndex) : makeSimpleRhythms(timeSignature, barIndex);
+}
+
+function makeBar(timeSignature, previousIndex, barIndex) {
+  const rhythms = makeBarRhythms(timeSignature, barIndex);
+  const notes = [];
+  let noteIndex = previousIndex;
+  let beamGroupCounter = 0;
+
+  function addNote(rhythm, beamGroupId = undefined, stepwise = false) {
+    if (rhythmInfo(rhythm).rest) {
+      notes.push({ rhythm, pitch: noteByIndex(noteIndex), beamGroupId: null });
+      return;
+    }
+
+    noteIndex = nearestMelodicIndex(noteIndex, stepwise);
+    notes.push({ rhythm, pitch: noteByIndex(noteIndex), beamGroupId });
+  }
+
+  function addBeamedGroup(rhythmList) {
+    const beamGroupId = `beam-${beamGroupCounter}`;
+    beamGroupCounter += 1;
+
+    rhythmList.forEach((rhythm) => {
+      const stepwise = rhythm === "quaver" || rhythm === "semiquaver" || rhythm === "dotted-quaver";
+      addNote(rhythm, beamGroupId, stepwise);
+    });
+  }
+
+  rhythms.forEach((rhythm) => {
+    if (rhythm === "quaver-group-3") return addBeamedGroup(["quaver", "quaver", "quaver"]);
+    if (rhythm === "semiquaver-group-4") return addBeamedGroup(["semiquaver", "semiquaver", "semiquaver", "semiquaver"]);
+    if (rhythm === "quaver-2semiquavers") return addBeamedGroup(["quaver", "semiquaver", "semiquaver"]);
+    if (rhythm === "2semiquavers-quaver") return addBeamedGroup(["semiquaver", "semiquaver", "quaver"]);
+    if (rhythm === "dotted-quaver-semiquaver") return addBeamedGroup(["dotted-quaver", "semiquaver"]);
+
+    if (rhythm === "crotchet-quaver") {
+      addNote("crotchet");
+      addNote("quaver", null, true);
+      return;
+    }
+
+    if (rhythm === "quaver-crotchet") {
+      addNote("quaver", null, true);
+      addNote("crotchet");
+      return;
+    }
+
+    addNote(rhythm, undefined, rhythm === "quaver");
+  });
+
+  return { notes, nextIndex: noteIndex };
+}
+
+function makeQuestion() {
+  const timeSignature = randomItem(TIME_SIGNATURES);
+  const bars = [];
+  let previousIndex = randomIndex(NOTES.length);
+
+  for (let index = 0; index < BAR_COUNT; index += 1) {
+    const bar = makeBar(timeSignature, previousIndex, index);
+    bars.push(bar);
+    previousIndex = bar.nextIndex;
+  }
+
+  return { timeSignature, bars };
+}
+
+function StaffLines({ systemTop }) {
+  return (
+    <g>
+      {[0, 1, 2, 3, 4].map((index) => (
+        <line key={index} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={systemTop + index * LINE_GAP} y2={systemTop + index * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />
+      ))}
+    </g>
+  );
+}
+
+function TrebleClef({ systemTop }) {
+  return (
+    <text x={CLEF_X} y={systemTop + 28} fontSize="80" fontFamily="serif" dominantBaseline="middle">
+      {TREBLE_CLEF}
+    </text>
+  );
+}
+
+function TimeSignatureGlyph({ signature, x, y, colour = "currentColor", fontSize = 30 }) {
+  return (
+    <g fontFamily="serif" fontWeight="900" fontSize={fontSize} textAnchor="middle" fill={colour}>
+      <text x={x} y={y}>{signature.top}</text>
+      <text x={x} y={y + fontSize * 0.62}>{signature.bottom}</text>
+    </g>
+  );
+}
+
+function LedgerLines({ x, step, systemTop, colour = "currentColor" }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2, systemTop));
+  if (step >= 10) lines.push(yForStep(10, systemTop));
+
+  return (
+    <g>
+      {lines.map((lineY) => (
+        <line key={lineY} x1={x - 12} x2={x + 12} y1={lineY} y2={lineY} stroke={colour} strokeWidth="1.2" />
+      ))}
+    </g>
+  );
+}
+
+function Rest({ rhythm, x, systemTop, colour = "currentColor" }) {
+  const middleY = systemTop + LINE_GAP * 2;
+
+  if (rhythm === "crotchet-rest" || rhythm === "dotted-crotchet-rest") {
+    const pathData = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`;
+
+    return (
+      <g>
+        <path d={pathData} fill="none" stroke={colour} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2" fill={colour} />}
+      </g>
+    );
+  }
+
+  // Quaver rest: intentionally simple classroom-friendly small 7.
+  const topY = middleY - 6;
+  const bottomY = middleY + 10;
+
+  return (
+    <g stroke={colour} strokeWidth="1.8" strokeLinecap="round" fill="none">
+      <line x1={x - 3} y1={topY} x2={x + 2} y2={topY} />
+      <line x1={x + 2} y1={topY} x2={x - 1} y2={bottomY} />
+      <circle cx={x - 4} cy={topY - 1} r="1.8" fill={colour} stroke="none" />
+    </g>
+  );
+}
+
+function Flag({ stemX, stemEndY, stemDown, colour = "currentColor", beams = 1 }) {
+  // Clean flag geometry for quaver and semiquaver symbols.
+  const primaryPath = stemDown
+    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}`
+    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
+
+  const secondaryStartY = stemDown ? stemEndY + 8 : stemEndY - 8;
+  const secondaryPath = stemDown
+    ? `M ${stemX} ${secondaryStartY} C ${stemX + 9} ${secondaryStartY - 4}, ${stemX + 9} ${secondaryStartY - 10}, ${stemX + 2} ${secondaryStartY - 14}`
+    : `M ${stemX} ${secondaryStartY} C ${stemX + 9} ${secondaryStartY + 4}, ${stemX + 9} ${secondaryStartY + 10}, ${stemX + 2} ${secondaryStartY + 14}`;
+
+  return (
+    <g>
+      <path d={primaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />
+      {beams === 2 && <path d={secondaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}
+    </g>
+  );
+}
+
+function getStemData(item, x, systemTop, stemDownOverride = null) {
+  const step = item.pitch.step;
+  const y = yForStep(step, systemTop);
+  const stemDown = stemDownOverride ?? stemGoesDown(step);
+  const stemX = stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1;
+  const stemEndY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH;
+  return { step, y, stemDown, stemX, stemEndY };
+}
+
+function Note({ item, x, systemTop, colour = "currentColor", stemDownOverride = null, forcedStemEndY = null, showFlag = true }) {
+  const info = rhythmInfo(item.rhythm);
+  if (info.rest) return <Rest rhythm={item.rhythm} x={x} systemTop={systemTop} colour={colour} />;
+
+  const stem = getStemData(item, x, systemTop, stemDownOverride);
+  const stemEndY = forcedStemEndY ?? stem.stemEndY;
+  const dotY = Math.abs(stem.step % 2) === 1 ? stem.y : stem.y - 5;
+
+  return (
+    <g>
+      <LedgerLines x={x} step={stem.step} systemTop={systemTop} colour={colour} />
+      <ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.7" />
+      {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={colour} strokeWidth="1.5" />}
+      {info.dots === 1 && <circle cx={x + 12} cy={dotY} r="2.1" fill={colour} />}
+      {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stemEndY} stemDown={stem.stemDown} colour={colour} beams={info.beams ?? 1} />}
+    </g>
+  );
+}
+
+function getBarNotePositions(notes, startX, endX) {
+  const totalUnits = notes.reduce((total, note) => total + rhythmInfo(note.rhythm).spacing, 0);
+  const unitWidth = Math.max(1, endX - startX) / Math.max(1, totalUnits);
+  let cursor = startX + unitWidth * 0.35;
+
+  return notes.map((note) => {
+    const x = cursor;
+    cursor += rhythmInfo(note.rhythm).spacing * unitWidth;
+    return x;
+  });
+}
+
+function getBeamLineYAtX(x, start, end) {
+  if (!start || !end || start.x === end.x) return start?.y ?? end?.y ?? 0;
+  const progress = (x - start.x) / (end.x - start.x);
+  return start.y + progress * (end.y - start.y);
+}
+
+function getBeamData(items, positions, systemTop) {
+  const middleLineStep = 4;
+  const averageStep = items.reduce((sum, item) => sum + item.pitch.step, 0) / items.length;
+
+  let stemDown;
+  if (averageStep > middleLineStep) stemDown = true;
+  else if (averageStep < middleLineStep) stemDown = false;
+  else {
+    const furthest = items.reduce((chosen, item) => {
+      return Math.abs(item.pitch.step - middleLineStep) > Math.abs(chosen.pitch.step - middleLineStep) ? item : chosen;
+    }, items[0]);
+    stemDown = furthest.pitch.step > middleLineStep;
+  }
+
+  const anchorStep = stemDown ? Math.max(...items.map((item) => item.pitch.step)) : Math.min(...items.map((item) => item.pitch.step));
+  const anchorIndex = items.findIndex((item) => item.pitch.step === anchorStep);
+  const startStem = getStemData(items[0], positions[0], systemTop, stemDown);
+  const endStem = getStemData(items[items.length - 1], positions[positions.length - 1], systemTop, stemDown);
+  const anchorStem = getStemData(items[anchorIndex], positions[anchorIndex], systemTop, stemDown);
+
+  const rawSlope = (items[items.length - 1].pitch.step - items[0].pitch.step) * -2;
+  const totalSlope = Math.max(-8, Math.min(8, rawSlope));
+  const totalX = Math.max(1, endStem.stemX - startStem.stemX);
+  const slopePerX = totalSlope / totalX;
+
+  return {
+    stemDown,
+    start: { x: startStem.stemX, y: anchorStem.stemEndY - slopePerX * (anchorStem.stemX - startStem.stemX) },
+    end: { x: endStem.stemX, y: anchorStem.stemEndY + slopePerX * (endStem.stemX - anchorStem.stemX) },
+  };
+}
+
+function isBeamableRhythm(rhythm) {
+  return rhythm === "quaver" || rhythm === "semiquaver" || rhythm === "dotted-quaver";
+}
+
+function getQuaverGroups(notes) {
+  const groups = [];
+  let index = 0;
+
+  while (index < notes.length) {
+    const note = notes[index];
+
+    if (!isBeamableRhythm(note.rhythm) || note.beamGroupId === null) {
+      index += 1;
+      continue;
+    }
+
+    const runStart = index;
+    const beamGroupId = note.beamGroupId;
+
+    if (beamGroupId === undefined) {
+      // Ordinary simple-time quaver runs: never beam 3 together.
+      while (index < notes.length && isBeamableRhythm(notes[index].rhythm) && notes[index].beamGroupId === undefined) index += 1;
+    } else {
+      // Explicit groups, including compound-time groups of 3, stay intact.
+      while (index < notes.length && isBeamableRhythm(notes[index].rhythm) && notes[index].beamGroupId === beamGroupId) index += 1;
+    }
+
+    const runEnd = index - 1;
+
+    if (beamGroupId !== undefined) {
+      if (runEnd > runStart) groups.push({ start: runStart, end: runEnd });
+      continue;
+    }
+
+    let groupStart = runStart;
+    while (groupStart <= runEnd) {
+      const remaining = runEnd - groupStart + 1;
+      let groupSize;
+
+      if (remaining >= 4) groupSize = 4;
+      else if (remaining === 3) groupSize = 2;
+      else groupSize = remaining;
+
+      const groupEnd = groupStart + groupSize - 1;
+      if (groupEnd > groupStart) groups.push({ start: groupStart, end: groupEnd });
+      groupStart = groupEnd + 1;
+    }
+  }
+
+  return groups;
+}
+
+function groupForNote(groups, noteIndex) {
+  return groups.find((group) => noteIndex >= group.start && noteIndex <= group.end) ?? null;
+}
+
+function Beam({ start, end, groupNotes, groupPositions, stemDown }) {
+  const secondaryOffset = stemDown ? -7 : 7;
+  const secondarySegments = [];
+  let segmentStart = null;
+
+  groupNotes.forEach((note, index) => {
+    const isSemiquaver = rhythmInfo(note.rhythm).beams === 2;
+    const nextNote = groupNotes[index + 1];
+    const nextIsSemiquaver = Boolean(nextNote && rhythmInfo(nextNote.rhythm).beams === 2);
+
+    if (isSemiquaver && segmentStart === null) segmentStart = index;
+
+    if (segmentStart !== null && (!nextIsSemiquaver || index === groupNotes.length - 1)) {
+      secondarySegments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart });
+      segmentStart = null;
+    }
+  });
+
+  function stemXFor(index) {
+    const x = groupPositions[index];
+    return stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1;
+  }
+
+  return (
+    <g>
+      <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />
+      {secondarySegments.map((segment, index) => {
+        const hookLength = 14;
+        const hookGoesLeft = segment.startIndex > 0;
+        const x1 = stemXFor(segment.startIndex);
+        const y1 = getBeamLineYAtX(x1, start, end) + secondaryOffset;
+        const x2 = segment.isHook ? x1 + (hookGoesLeft ? -hookLength : hookLength) : stemXFor(segment.endIndex);
+        const y2 = segment.isHook ? y1 : getBeamLineYAtX(x2, start, end) + secondaryOffset;
+        return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />;
+      })}
+    </g>
+  );
+}
+
+function Bar({ bar, barIndex, systemTop, startX, endX, isFinalBar }) {
+  const isFirstBarInSystem = barIndex === 0 || barIndex === 4;
+  const firstNoteOffset = isFirstBarInSystem ? 2 : 7;
+  const positions = getBarNotePositions(bar.notes, startX + firstNoteOffset + 5, endX - 6);
+  const quaverGroups = getQuaverGroups(bar.notes);
+
+  return (
+    <g>
+      {bar.notes.map((note, index) => {
+        const group = groupForNote(quaverGroups, index);
+        if (!group) return <Note key={index} item={note} x={positions[index]} systemTop={systemTop} />;
+
+        const groupNotes = bar.notes.slice(group.start, group.end + 1);
+        const groupPositions = positions.slice(group.start, group.end + 1);
+        const beamData = getBeamData(groupNotes, groupPositions, systemTop);
+        const stem = getStemData(note, positions[index], systemTop, beamData.stemDown);
+        const forcedStemEndY = getBeamLineYAtX(stem.stemX, beamData.start, beamData.end);
+
+        return <Note key={index} item={note} x={positions[index]} systemTop={systemTop} stemDownOverride={beamData.stemDown} forcedStemEndY={forcedStemEndY} showFlag={false} />;
+      })}
+
+      {quaverGroups.map((group, index) => {
+        const groupNotes = bar.notes.slice(group.start, group.end + 1);
+        const groupPositions = positions.slice(group.start, group.end + 1);
+        const beamData = getBeamData(groupNotes, groupPositions, systemTop);
+        return <Beam key={index} start={beamData.start} end={beamData.end} groupNotes={groupNotes} groupPositions={groupPositions} stemDown={beamData.stemDown} />;
+      })}
+
+      {isFinalBar ? (
+        <g>
+          <line x1={endX - 5} x2={endX - 5} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />
+          <line x1={endX} x2={endX} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" />
+        </g>
+      ) : (
+        <line x1={endX} x2={endX} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />
+      )}
+    </g>
+  );
+}
+
+function Score({ question, feedback, selectedAnswer }) {
+  const showCorrectSignature = Boolean(feedback);
+
+  return (
+    <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none" aria-label="Time signature exercise">
+      <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
+      {SYSTEM_TOPS.map((systemTop, systemIndex) => {
+        const systemStartX = systemIndex === 0 ? FIRST_SYSTEM_MUSIC_START_X : OTHER_SYSTEM_MUSIC_START_X;
+        const barWidth = (STAFF_RIGHT - systemStartX) / BARS_PER_SYSTEM;
+
+        return (
+          <g key={systemIndex}>
+            <StaffLines systemTop={systemTop} />
+            <TrebleClef systemTop={systemTop} />
+            {systemIndex === 0 && showCorrectSignature && <TimeSignatureGlyph signature={question.timeSignature} x={TIME_SIG_X} y={systemTop + 20} colour="#000" />}
+            {Array.from({ length: BARS_PER_SYSTEM }, (_, localBarIndex) => {
+              const globalBarIndex = systemIndex * BARS_PER_SYSTEM + localBarIndex;
+              const startX = systemStartX + localBarIndex * barWidth;
+              const endX = systemStartX + (localBarIndex + 1) * barWidth;
+              return <Bar key={globalBarIndex} bar={question.bars[globalBarIndex]} barIndex={globalBarIndex} systemTop={systemTop} startX={startX} endX={endX} isFinalBar={globalBarIndex === BAR_COUNT - 1} />;
+            })}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function TimeSignatureButton({ signature, selected, disabled, onClick, feedback, correctAnswer }) {
+  const isCorrect = feedback && signature.id === correctAnswer;
+  const isWrong = feedback === "incorrect" && selected && !isCorrect;
+
+  const base = "rounded-xl border px-5 py-3 font-semibold";
+
+  const stateClass = isCorrect
+    ? "bg-green-600 text-white border-green-600"
+    : isWrong
+    ? "bg-red-600 text-white border-red-600"
+    : selected
+    ? "bg-stone-950 text-white border-stone-950"
+    : "border-stone-300 hover:bg-stone-100";
+
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} className={`${base} ${stateClass}`} aria-label={signature.id}>
+      <svg viewBox="0 0 60 82" className="h-16 w-12 mx-auto">
+        <text x="30" y="34" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="36" fill="currentColor">{signature.top}</text>
+        <text x="30" y="65" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="36" fill="currentColor">{signature.bottom}</text>
+      </svg>
+    </button>
+  );
+}
+
+function AnswerOptions({ selectedAnswer, disabled, onSelect, feedback, correctAnswer }) {
+  return (
+    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+      {TIME_SIGNATURES.map((signature) => (
+        <TimeSignatureButton
+          key={signature.id}
+          signature={signature}
+          selected={selectedAnswer === signature.id}
+          disabled={disabled}
+          onClick={() => onSelect(signature.id)}
+          feedback={feedback}
+          correctAnswer={correctAnswer}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-xl border bg-stone-50 p-3 text-center">
+      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function NoteLegendSymbol({ rhythm }) {
+  const fakeItem = { rhythm, pitch: { name: "B4", step: 4 } };
+  return (
+    <svg viewBox="0 0 70 70" className="h-8 w-12 overflow-visible">
+      <g transform="translate(0, 6)">
+        <Note item={fakeItem} x={32} systemTop={8} />
+      </g>
+    </svg>
+  );
+}
+
+function HelpPanel({ timeSignature }) {
+  const isSimple = timeSignature.type === "simple";
+  const guidance = isSimple ? (
+    <>
+      The time signature is in <strong>simple time</strong>. Be sure to count how many <strong>crotchet</strong> beats per bar.
+    </>
+  ) : (
+    <>
+      The time signature is in <strong>compound time</strong>. Be sure to count how many <strong>quaver</strong> beats per bar.
+    </>
+  );
+
+  const legend = [
+    { rhythm: "semibreve", label: "4 beats" },
+    { rhythm: "dotted-minim", label: "3 beats" },
+    { rhythm: "minim", label: "2 beats" },
+    { rhythm: "dotted-crotchet", label: "1.5 beats" },
+    { rhythm: "crotchet", label: "1 beat" },
+    { rhythm: "quaver", label: "0.5 beats" },
+    { rhythm: "semiquaver", label: "0.25 beats" },
+  ];
+
+  return (
+    <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+      <p className="text-center font-semibold">{guidance}</p>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-7">
+        {legend.map((item) => (
+          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg bg-white/70 px-2 py-2 text-center">
+            <NoteLegendSymbol rhythm={item.rhythm} />
+            <span className="font-medium">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Feedback({ feedback, correctAnswer }) {
+  if (!feedback) return null;
+
+  const correctSignature = TIME_SIGNATURES.find((signature) => signature.id === correctAnswer);
+
+  return (
+    <div className="mt-5 flex min-h-[96px] items-center justify-center p-4">
+      <div className={`text-center font-semibold ${feedback === "correct" ? "text-green-700" : "text-red-700"}`}>
+        {feedback === "correct" ? (
+          <p>{TICK} Correct</p>
+        ) : (
+          <div className="flex items-center justify-center gap-3">
+            <p>{CROSS} Incorrect</p>
+            <span className="text-base font-semibold text-black">The answer is:</span>
+            {correctSignature && (
+              <svg viewBox="0 0 70 92" className="h-16 w-12 text-black" aria-label={`Correct answer ${correctAnswer}`}>
+                <text x="35" y="38" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="42" fill="currentColor">{correctSignature.top}</text>
+                <text x="35" y="76" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="42" fill="currentColor">{correctSignature.bottom}</text>
+              </svg>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function runChecks() {
+  console.assert(TIME_SIGNATURES.length === 6, "There should be six time-signature choices.");
+  console.assert(BAR_COUNT === 8, "There should be eight bars.");
+  console.assert(BARS_PER_SYSTEM === 4, "There should be four bars per system.");
+  console.assert(NOTES[0].name === "C4" && NOTES[NOTES.length - 1].name === "A5", "Note range should be C4 to A5.");
+
+  for (let i = 0; i < 40; i += 1) {
+    const question = makeQuestion();
+    console.assert(question.bars.length === BAR_COUNT, "Generated question should contain eight bars.");
+    question.bars.forEach((bar) => {
+      const totalBeats = bar.notes.reduce((total, note) => total + rhythmInfo(note.rhythm).beats, 0);
+      console.assert(Math.abs(totalBeats - question.timeSignature.beatsPerBar) < 0.001, "Each bar should match the selected time signature.");
+    });
+  }
+}
+
+runChecks();
+
+function TimeSignatures() {
+  const timeoutRef = useRef(null);
+  const [question, setQuestion] = useState(() => makeQuestion());
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+
+  function clearTimer() {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
+
+  function nextQuestion() {
+    clearTimer();
+    setQuestion(makeQuestion());
+    setSelectedAnswer(null);
+    setFeedback(null);
+  }
+
+  function selectAnswer(answerId) {
+    if (feedback) return;
+
+    const isCorrect = answerId === question.timeSignature.id;
+    const newStreak = isCorrect ? streak + 1 : 0;
+
+    setSelectedAnswer(answerId);
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(newStreak);
+    setBestStreak((value) => Math.max(value, newStreak));
+    setFeedback(isCorrect ? "correct" : "incorrect");
+
+    clearTimer();
+    timeoutRef.current = window.setTimeout(nextQuestion, 2000);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    nextQuestion();
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
+          <div className="flex flex-col items-center md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Time Signatures</h1>
+              <p className="mt-2 text-stone-700">Identify the time signature.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 min-w-[280px]">
+              <StatCard label="Score" value={`${correct}/${attempted}`} />
+              <StatCard label="Accuracy" value={`${accuracy}%`} />
+              <StatCard label="Streak" value={streak} />
+            </div>
+          </div>
+        </header>
+
+        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
+          <div className="mb-4 flex justify-end gap-2">
+            <button
+              type="button"
+              title="Help"
+              aria-label="Help"
+              onClick={() => setShowHelp((value) => !value)}
+              className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}
+            >
+              ?
+            </button>
+            <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">Reset score</button>
+          </div>
+
+          {showHelp && <HelpPanel timeSignature={question.timeSignature} />}
+          <AnswerOptions
+            selectedAnswer={selectedAnswer}
+            disabled={Boolean(feedback)}
+            onSelect={selectAnswer}
+            feedback={feedback}
+            correctAnswer={question.timeSignature.id}
+          />
+          <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <Score question={question} feedback={feedback} selectedAnswer={selectedAnswer} />
+          </div>
+          <Feedback feedback={feedback} correctAnswer={question.timeSignature.id} />
+          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<TimeSignatures />);
+
+  </script>
+</body>
+</html>
