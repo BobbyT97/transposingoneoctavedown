@@ -8,14 +8,12 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script crossorigin src="https://unpkg.com/framer-motion/dist/framer-motion.umd.js"></script>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
 const { useRef, useState } = React;
-const { motion } = window.Motion || window.framerMotion || {};
 
 const VIEWBOX_WIDTH = 920;
 const VIEWBOX_HEIGHT = 430;
@@ -395,7 +393,7 @@ function Feedback({ feedback, allCorrect, warning, semibreveRuleBroken }) {
   if (warning) return <div className="mt-4 text-center font-semibold text-amber-700">{warning}</div>;
   if (semibreveRuleBroken) return <div className="mt-4 text-center font-semibold text-red-700">An empty bar should always be a semibreve rest regardless of the time signature.</div>;
   if (!feedback) return null;
-  return <div className="mt-5 flex min-h-[80px] items-center justify-center p-4"><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`text-center font-semibold ${allCorrect ? "text-green-700" : "text-red-700"}`}>{allCorrect ? <p>{TICK} Correct</p> : <p>{CROSS} Incorrect</p>}</motion.div></div>;
+  return <div className="mt-5 flex min-h-[80px] items-center justify-center p-4"><div className={`text-center font-semibold ${allCorrect ? "text-green-700" : "text-red-700"}`}>{allCorrect ? <p>{TICK} Correct</p> : <p>{CROSS} Incorrect</p>}</div></div>;
 }
 function unitsForNotes(notes) { return notes.reduce((sum, note) => sum + (note.rhythm === "missing" ? note.units : rhythmInfo(note.rhythm).units), 0); }
 function runChecks() {
