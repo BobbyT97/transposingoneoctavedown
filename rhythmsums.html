@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rhythms</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useRef, useState } = React;
+
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const NOTE_RX = 7;
+const NOTE_RY = 5;
+const STEM_LENGTH = 34;
+const LINE_GAP = 10;
+const OPERATORS = ["+", "−", "×", "÷"];
+
+const OPERATOR_LABELS = {
+  "+": "Add",
+  "−": "Subtract",
+  "×": "Multiply",
+  "÷": "Divide",
+};
+
+const RHYTHMS = {
+  semibreve: { label: "Semibreve", beats: 4, open: true, stem: false, dots: 0, rest: "semibreve-rest" },
+  "dotted-minim": { label: "Dotted minim", beats: 3, open: true, stem: true, dots: 1, rest: "dotted-minim-rest" },
+  minim: { label: "Minim", beats: 2, open: true, stem: true, dots: 0, rest: "minim-rest" },
+  "dotted-crotchet": { label: "Dotted crotchet", beats: 1.5, open: false, stem: true, dots: 1, rest: "dotted-crotchet-rest" },
+  crotchet: { label: "Crotchet", beats: 1, open: false, stem: true, dots: 0, rest: "crotchet-rest" },
+  "dotted-quaver": { label: "Dotted quaver", beats: 0.75, open: false, stem: true, dots: 1, flag: true, beams: 1, rest: "dotted-quaver-rest" },
+  quaver: { label: "Quaver", beats: 0.5, open: false, stem: true, dots: 0, flag: true, beams: 1, rest: "quaver-rest" },
+  semiquaver: { label: "Semiquaver", beats: 0.25, open: false, stem: true, dots: 0, flag: true, beams: 2, rest: "semiquaver-rest" },
+};
+
+const BASE_RHYTHMS = [
+  "semibreve",
+  "dotted-minim",
+  "minim",
+  "dotted-crotchet",
+  "crotchet",
+  "dotted-quaver",
+  "quaver",
+  "semiquaver",
+].map((id) => ({ id, kind: "single", label: RHYTHMS[id].label, beats: RHYTHMS[id].beats }));
+
+const BEAMED_RHYTHMS = [
+  { id: "two-quavers", label: "Two quavers", beats: 1, kind: "beamed", rhythms: ["quaver", "quaver"] },
+  { id: "four-semiquavers", label: "Four semiquavers", beats: 1, kind: "beamed", rhythms: ["semiquaver", "semiquaver", "semiquaver", "semiquaver"] },
+  { id: "quaver-two-semiquavers", label: "Quaver + two semiquavers", beats: 1, kind: "beamed", rhythms: ["quaver", "semiquaver", "semiquaver"] },
+  { id: "two-semiquavers-quaver", label: "Two semiquavers + quaver", beats: 1, kind: "beamed", rhythms: ["semiquaver", "semiquaver", "quaver"] },
+  { id: "dotted-quaver-semiquaver", label: "Dotted quaver + semiquaver", beats: 1, kind: "beamed", rhythms: ["dotted-quaver", "semiquaver"] },
+];
+
+const DEFAULT_SETTINGS = {
+  enabledItems: BASE_RHYTHMS.map((item) => item.id),
+  enabledOperators: ["+", "−"],
+  includeRests: false,
+  includeBeamedGroups: false,
+};
+
+function randomItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function isQuarterBeat(value) {
+  return Number.isFinite(value) && value >= 0 && Math.abs(value * 4 - Math.round(value * 4)) < 0.0001;
+}
+
+function formatBeat(value) {
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function calculate(left, operator, right) {
+  if (operator === "+") return left + right;
+  if (operator === "−") return left - right;
+  if (operator === "×") return left * right;
+  return left / right;
+}
+
+function loadSettings() {
+  try {
+    const saved = window.localStorage.getItem("rhythms-app-settings");
+    if (!saved) return DEFAULT_SETTINGS;
+    const parsed = JSON.parse(saved);
+    return {
+      enabledItems: Array.isArray(parsed.enabledItems)
+        ? parsed.enabledItems.filter((id) => BASE_RHYTHMS.some((item) => item.id === id))
+        : DEFAULT_SETTINGS.enabledItems,
+      enabledOperators: Array.isArray(parsed.enabledOperators) ? parsed.enabledOperators : DEFAULT_SETTINGS.enabledOperators,
+      includeRests: typeof parsed.includeRests === "boolean" ? parsed.includeRests : DEFAULT_SETTINGS.includeRests,
+      includeBeamedGroups: typeof parsed.includeBeamedGroups === "boolean" ? parsed.includeBeamedGroups : DEFAULT_SETTINGS.includeBeamedGroups,
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    window.localStorage.setItem("rhythms-app-settings", JSON.stringify(settings));
+  } catch {}
+}
+
+function beamedPoolFromSettings(settings) {
+  const quaverEnabled = settings.enabledItems.includes("quaver");
+  const semiquaverEnabled = settings.enabledItems.includes("semiquaver");
+  const dottedQuaverEnabled = settings.enabledItems.includes("dotted-quaver");
+
+  if (!settings.includeBeamedGroups || (!quaverEnabled && !semiquaverEnabled && !dottedQuaverEnabled)) return [];
+
+  return BEAMED_RHYTHMS.filter((item) => {
+    const usesQuaver = item.rhythms.includes("quaver");
+    const usesSemiquaver = item.rhythms.includes("semiquaver");
+    const usesDottedQuaver = item.rhythms.includes("dotted-quaver");
+
+    if (usesDottedQuaver && !(dottedQuaverEnabled && semiquaverEnabled)) return false;
+    if (usesQuaver && !quaverEnabled) return false;
+    if (usesSemiquaver && !semiquaverEnabled) return false;
+
+    return true;
+  });
+}
+
+function itemPoolFromSettings(settings) {
+  const baseItems = BASE_RHYTHMS.filter((item) => settings.enabledItems.includes(item.id));
+  return [...baseItems, ...beamedPoolFromSettings(settings)];
+}
+
+function makeDisplayItem(item, settings = DEFAULT_SETTINGS) {
+  if (item.kind === "beamed") return { ...item, displayType: "beamed" };
+
+  const useRest = settings.includeRests && Math.random() < 0.5;
+  const rhythm = useRest ? RHYTHMS[item.id].rest : item.id;
+
+  return {
+    ...item,
+    rhythm,
+    displayType: useRest ? "rest" : "note",
+  };
+}
+
+function makeQuestion(settings = DEFAULT_SETTINGS) {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const itemPool = itemPoolFromSettings(settings);
+    const operatorPool = OPERATORS.filter((operator) => settings.enabledOperators.includes(operator));
+
+    if (itemPool.length < 2 || operatorPool.length < 1) break;
+
+    let left = randomItem(itemPool);
+    let right = randomItem(itemPool);
+    const operator = randomItem(operatorPool);
+
+    if (operator === "−" && left.beats < right.beats) [left, right] = [right, left];
+
+    const answer = calculate(left.beats, operator, right.beats);
+    if (!isQuarterBeat(answer)) continue;
+
+    return {
+      left: makeDisplayItem(left, settings),
+      right: makeDisplayItem(right, settings),
+      operator,
+      answer,
+    };
+  }
+
+  return {
+    left: makeDisplayItem(BASE_RHYTHMS.find((item) => item.id === "crotchet"), settings),
+    right: makeDisplayItem(BASE_RHYTHMS.find((item) => item.id === "quaver"), settings),
+    operator: "+",
+    answer: 1.5,
+  };
+}
+
+function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
+  const middleY = systemTop + LINE_GAP * 2;
+
+  if (rhythm === "semibreve-rest") {
+    return (
+      <g>
+        <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP} y2={systemTop + LINE_GAP} stroke={colour} strokeWidth="1.4" />
+        <rect x={x - 8} y={systemTop + LINE_GAP} width="16" height="5" fill={colour} />
+      </g>
+    );
+  }
+
+  if (rhythm === "minim-rest" || rhythm === "dotted-minim-rest") {
+    return (
+      <g>
+        <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP * 2} y2={systemTop + LINE_GAP * 2} stroke={colour} strokeWidth="1.4" />
+        <rect x={x - 8} y={systemTop + LINE_GAP * 2 - 5} width="16" height="5" fill={colour} />
+        {rhythm === "dotted-minim-rest" && <circle cx={x + 14} cy={systemTop + LINE_GAP * 2 - 4} r="2.1" fill={colour} />}
+      </g>
+    );
+  }
+
+  if (rhythm === "crotchet-rest" || rhythm === "dotted-crotchet-rest") {
+    const d = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`;
+    return (
+      <g>
+        <path d={d} fill="none" stroke={colour} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+        {rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2.1" fill={colour} />}
+      </g>
+    );
+  }
+
+  const topY = middleY - 6;
+  const bottomY = middleY + 10;
+
+  if (rhythm === "dotted-quaver-rest") {
+    return (
+      <g>
+        <Rest rhythm="quaver-rest" x={x} systemTop={systemTop} colour={colour} />
+        <circle cx={x + 8} cy={topY + 3} r="2" fill={colour} />
+      </g>
+    );
+  }
+
+  if (rhythm === "semiquaver-rest") {
+    return (
+      <g stroke={colour} strokeWidth="2" strokeLinecap="round" fill="none">
+        <line x1={x - 3} y1={topY} x2={x + 3} y2={topY} />
+        <line x1={x + 3} y1={topY} x2={x - 1} y2={bottomY} />
+        <circle cx={x - 5} cy={topY - 1} r="2" fill={colour} stroke="none" />
+        <line x1={x - 3} y1={topY + 8} x2={x + 1} y2={topY + 8} />
+        <circle cx={x - 4} cy={topY + 7} r="1.8" fill={colour} stroke="none" />
+      </g>
+    );
+  }
+
+  return (
+    <g stroke={colour} strokeWidth="1.9" strokeLinecap="round" fill="none">
+      <line x1={x - 3} y1={topY} x2={x + 2} y2={topY} />
+      <line x1={x + 2} y1={topY} x2={x - 1} y2={bottomY} />
+      <circle cx={x - 4} cy={topY - 1} r="1.9" fill={colour} stroke="none" />
+    </g>
+  );
+}
+
+function Flag({ stemX, stemEndY, beams = 1, colour = "currentColor" }) {
+  const primaryPath = `M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY + 5}, ${stemX + 12} ${stemEndY + 14}, ${stemX + 3} ${stemEndY + 18}`;
+  const secondaryPath = `M ${stemX} ${stemEndY + 7} C ${stemX + 10} ${stemEndY + 10}, ${stemX + 10} ${stemEndY + 18}, ${stemX + 3} ${stemEndY + 22}`;
+
+  return (
+    <g>
+      <path d={primaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />
+      {beams === 2 && <path d={secondaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}
+    </g>
+  );
+}
+
+function Note({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
+  const info = RHYTHMS[rhythm];
+  const y = systemTop + LINE_GAP * 2;
+  const stemX = x + NOTE_RX;
+  const stemEndY = y - STEM_LENGTH;
+  const dotY = y - 5;
+
+  return (
+    <g>
+      <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
+      {info.stem && <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.6" />}
+      {info.dots === 1 && <circle cx={x + 13} cy={dotY} r="2.2" fill={colour} />}
+      {info.flag && <Flag stemX={stemX} stemEndY={stemEndY} colour={colour} beams={info.beams ?? 1} />}
+    </g>
+  );
+}
+
+function getBeamLineYAtX(x, start, end) {
+  if (start.x === end.x) return start.y;
+  return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y);
+}
+
+function BeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) {
+  const systemTop = 10;
+  const isDottedPair = rhythms.length === 2 && rhythms[0] === "dotted-quaver" && rhythms[1] === "semiquaver";
+  const spacing = isDottedPair ? 26 : 18;
+  const positions = rhythms.map((_, index) => 20 + index * spacing);
+  const stemEndY = systemTop - 12;
+  const start = { x: positions[0] + NOTE_RX, y: stemEndY };
+  const end = { x: positions[positions.length - 1] + NOTE_RX, y: stemEndY };
+
+  const secondarySegments = [];
+  let segmentStart = null;
+  rhythms.forEach((rhythm, index) => {
+    const isSemi = RHYTHMS[rhythm].beams === 2;
+    const nextIsSemi = rhythms[index + 1] && RHYTHMS[rhythms[index + 1]].beams === 2;
+    if (isSemi && segmentStart === null) segmentStart = index;
+    if (segmentStart !== null && (!nextIsSemi || index === rhythms.length - 1)) {
+      secondarySegments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart });
+      segmentStart = null;
+    }
+  });
+
+  return (
+    <svg viewBox="0 0 112 92" className="h-28 w-40 overflow-visible">
+      <g transform={`translate(56 78) scale(${scale}) translate(-50 -55)`}>
+        {rhythms.map((rhythm, index) => {
+          const x = positions[index];
+          const y = systemTop + LINE_GAP * 2;
+          const stemX = x + NOTE_RX;
+          const info = RHYTHMS[rhythm];
+          return (
+            <g key={`${rhythm}-${index}`}>
+              <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={colour} stroke={colour} strokeWidth="1.8" />
+              <line x1={stemX} x2={stemX} y1={y} y2={getBeamLineYAtX(stemX, start, end)} stroke={colour} strokeWidth="1.6" />
+              {info.dots === 1 && <circle cx={x + 13} cy={y - 5} r="2.2" fill={colour} />}
+            </g>
+          );
+        })}
+
+        <line x1={start.x - 1} y1={start.y} x2={end.x + 1} y2={end.y} stroke={colour} strokeWidth="4" />
+
+        {secondarySegments.map((segment, index) => {
+          const x1 = positions[segment.startIndex] + NOTE_RX;
+          const y1 = stemEndY + 7;
+          const hookLength = isDottedPair ? 9 : 14;
+          const x2 = segment.isHook ? x1 + (segment.startIndex > 0 ? -hookLength : 17) : positions[segment.endIndex] + NOTE_RX;
+          return <line key={index} x1={x1} y1={y1} x2={x2} y2={y1} stroke={colour} strokeWidth="4" />;
+        })}
+      </g>
+    </svg>
+  );
+}
+
+function rhythmVisualOffset(item) {
+  if (item.displayType === "beamed") return 0;
+  if (item.rhythm === "semibreve") return -18;
+  if (item.rhythm === "semibreve-rest") return -16;
+  if (item.rhythm === "minim-rest" || item.rhythm === "dotted-minim-rest") return -10;
+  if (item.rhythm?.includes("rest")) return -6;
+  return 0;
+}
+
+function RhythmGlyph({ item, colour = "currentColor", scale = 1 }) {
+  const yOffset = rhythmVisualOffset(item);
+
+  if (item.displayType === "beamed") {
+    return (
+      <div style={{ transform: `translateY(${yOffset}px)` }}>
+        <BeamedNotes rhythms={item.rhythms} colour={colour} scale={scale} />
+      </div>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 90 90" className="h-28 w-32 overflow-visible" style={{ transform: `translateY(${yOffset}px)` }}>
+      <g transform={`translate(45 72) scale(${scale}) translate(-42 -52)`}>
+        {item.displayType === "rest" ? <Rest rhythm={item.rhythm} x={42} systemTop={12} colour={colour} /> : <Note rhythm={item.rhythm} x={42} systemTop={12} colour={colour} />}
+      </g>
+    </svg>
+  );
+}
+
+function RhythmSlot({ children }) {
+  return (
+    <div className="flex h-32 w-44 items-center justify-center overflow-visible">
+      {children}
+    </div>
+  );
+}
+
+function RhythmGlyphForHelp({ rhythm }) {
+  const rest = RHYTHMS[rhythm].rest;
+  return (
+    <div className="flex items-center justify-center gap-1 mt-5">
+      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible"><Note rhythm={rhythm} x={42} systemTop={12} /></svg>
+      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible"><Rest rhythm={rest} x={42} systemTop={12} /></svg>
+    </div>
+  );
+}
+
+function CustomiserGlyph({ item }) {
+  return (
+    <div className="flex h-16 w-full items-center justify-center pt-5">
+      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible">
+        <Note rhythm={item.id} x={42} systemTop={12} />
+      </svg>
+    </div>
+  );
+}
+
+function ToggleButton({ active, disabled = false, onClick, children, title }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className={`flex items-center justify-center rounded-md border bg-white px-2 py-1 text-sm font-semibold ${active ? "border-green-600" : "border-stone-300 hover:bg-stone-100"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CustomiserPanel({ settings, onToggleItem, onToggleOperator, onToggleRests, onToggleBeamedGroups }) {
+  const selectedCount = settings.enabledItems.length;
+  const operatorCount = settings.enabledOperators.length;
+  const canIncludeBeamedGroups = settings.enabledItems.includes("quaver") || settings.enabledItems.includes("semiquaver") || settings.enabledItems.includes("dotted-quaver");
+
+  return (
+    <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+      <h2 className="mb-3 text-center text-lg font-semibold">Customise</h2>
+
+      <div className="mb-4">
+        <h3 className="mb-2 text-sm font-semibold text-stone-700">Rhythms</h3>
+        <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          {BASE_RHYTHMS.map((item) => (
+            <ToggleButton
+              key={item.id}
+              active={settings.enabledItems.includes(item.id)}
+              onClick={() => onToggleItem(item.id)}
+              title={item.label}
+            >
+              <CustomiserGlyph item={item} />
+            </ToggleButton>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center gap-6">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.includeRests}
+              onChange={onToggleRests}
+              className="h-5 w-5 accent-green-600"
+            />
+            <span className="font-semibold">Include rests</span>
+          </label>
+
+          <label className={`flex items-center gap-3 ${canIncludeBeamedGroups ? "" : "opacity-40"}`}>
+            <input
+              type="checkbox"
+              checked={settings.includeBeamedGroups && canIncludeBeamedGroups}
+              disabled={!canIncludeBeamedGroups}
+              onChange={onToggleBeamedGroups}
+              className="h-5 w-5 accent-green-600"
+            />
+            <span className="font-semibold">Include beamed groups</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-stone-700">Operations</h3>
+        <div className="grid grid-cols-4 gap-2">
+          {OPERATORS.map((operator) => (
+            <ToggleButton
+              key={operator}
+              active={settings.enabledOperators.includes(operator)}
+              onClick={() => onToggleOperator(operator)}
+              title={OPERATOR_LABELS[operator]}
+            >
+              <span className="text-2xl">{operator}</span>
+            </ToggleButton>
+          ))}
+        </div>
+      </div>
+
+      {(selectedCount < 2 || operatorCount < 1) && (
+        <p className="mt-3 text-center text-sm font-semibold text-red-700">
+          Select at least two rhythm items and one operation.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function HelpPanel() {
+  return (
+    <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+      <p className="text-center font-semibold">Use the rhythm value of each symbol to calculate the answer.</p>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+        {BASE_RHYTHMS.map((item) => (
+          <div key={item.id} className="flex flex-col items-center justify-center rounded-lg bg-white/70 px-2 py-2 text-center">
+            <RhythmGlyphForHelp rhythm={item.id} />
+            <span className="font-medium mt-1">{item.label}</span>
+            <span className="text-xs text-stone-600">{formatBeat(item.beats)} beats</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-xl border bg-stone-50 p-3 text-center">
+      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function Feedback({ feedback, correct }) {
+  if (!feedback) return null;
+  return (
+    <div className="mt-5 flex min-h-[80px] items-center justify-center p-4">
+      <div className={`text-center font-semibold ${correct ? "text-green-700" : "text-red-700"}`}>
+        {correct ? <p>{TICK} Correct</p> : <p>{CROSS} Incorrect</p>}
+      </div>
+    </div>
+  );
+}
+
+function Rhythms() {
+  const timeoutRef = useRef(null);
+  const [settings, setSettings] = useState(() => loadSettings());
+  const [question, setQuestion] = useState(() => makeQuestion(loadSettings()));
+  const [answerText, setAnswerText] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [lastCorrect, setLastCorrect] = useState(false);
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showCustomiser, setShowCustomiser] = useState(false);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const hasAnswer = answerText.trim().length > 0;
+  const settingsValid = settings.enabledItems.length >= 2 && settings.enabledOperators.length >= 1;
+  const inputColour = feedback ? (lastCorrect ? "text-green-700 border-green-600" : "text-red-700 border-red-600") : "text-stone-950 border-stone-300";
+
+  function clearTimer() {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
+
+  function nextQuestion() {
+    clearTimer();
+    setQuestion(makeQuestion(settings));
+    setAnswerText("");
+    setFeedback(null);
+    setLastCorrect(false);
+  }
+
+  function updateSettings(nextSettings) {
+    const cleanSettings = { ...nextSettings };
+    const canBeam = cleanSettings.enabledItems.includes("quaver") || cleanSettings.enabledItems.includes("semiquaver") || cleanSettings.enabledItems.includes("dotted-quaver");
+    if (!canBeam) cleanSettings.includeBeamedGroups = false;
+    saveSettings(cleanSettings);
+    setSettings(cleanSettings);
+    clearTimer();
+    setQuestion(makeQuestion(cleanSettings));
+    setAnswerText("");
+    setFeedback(null);
+    setLastCorrect(false);
+  }
+
+  function toggleItem(id) {
+    const enabled = settings.enabledItems.includes(id);
+    const nextItems = enabled
+      ? settings.enabledItems.filter((itemId) => itemId !== id)
+      : [...settings.enabledItems, id];
+
+    updateSettings({ ...settings, enabledItems: nextItems });
+  }
+
+  function toggleOperator(operator) {
+    const enabled = settings.enabledOperators.includes(operator);
+    const nextOperators = enabled
+      ? settings.enabledOperators.filter((item) => item !== operator)
+      : [...settings.enabledOperators, operator];
+
+    updateSettings({ ...settings, enabledOperators: nextOperators });
+  }
+
+  function toggleRests() {
+    updateSettings({ ...settings, includeRests: !settings.includeRests });
+  }
+
+  function toggleBeamedGroups() {
+    const canIncludeBeamedGroups = settings.enabledItems.includes("quaver") || settings.enabledItems.includes("semiquaver") || settings.enabledItems.includes("dotted-quaver");
+    if (!canIncludeBeamedGroups) return;
+    updateSettings({ ...settings, includeBeamedGroups: !settings.includeBeamedGroups });
+  }
+
+  function handleInput(event) {
+    if (feedback) return;
+    const value = event.target.value;
+    if (/^\d*\.?\d*$/.test(value)) setAnswerText(value);
+  }
+
+  function confirmAnswer() {
+    if (!hasAnswer || feedback || !settingsValid) return;
+
+    const userAnswer = Number(answerText);
+    const isCorrect = Math.abs(userAnswer - question.answer) < 0.0001;
+    const newStreak = isCorrect ? streak + 1 : 0;
+
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(newStreak);
+    setBestStreak((value) => Math.max(value, newStreak));
+    setLastCorrect(isCorrect);
+    setFeedback(isCorrect ? "correct" : "incorrect");
+
+    clearTimer();
+    timeoutRef.current = window.setTimeout(nextQuestion, isCorrect ? 2000 : 4000);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    nextQuestion();
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
+          <div className="flex flex-col items-center md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Rhythms</h1>
+              <p className="mt-2 text-stone-700">Calculate the sum by entering the correct number of beats.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 min-w-[280px]">
+              <StatCard label="Score" value={`${correct}/${attempted}`} />
+              <StatCard label="Accuracy" value={`${accuracy}%`} />
+              <StatCard label="Streak" value={streak} />
+            </div>
+          </div>
+        </header>
+
+        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex gap-2">
+              <button type="button" title="Customise" aria-label="Customise" onClick={() => setShowCustomiser((value) => !value)} className={`rounded-xl border px-4 py-2 text-sm font-bold ${showCustomiser ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}>Customise</button>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" title="Help" aria-label="Help" onClick={() => setShowHelp((value) => !value)} className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}>?</button>
+              <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">Reset score</button>
+            </div>
+          </div>
+
+          {showCustomiser && (
+            <CustomiserPanel
+              settings={settings}
+              onToggleItem={toggleItem}
+              onToggleOperator={toggleOperator}
+              onToggleRests={toggleRests}
+              onToggleBeamedGroups={toggleBeamedGroups}
+            />
+          )}
+          {showHelp && <HelpPanel />}
+
+          <div className="rounded-2xl border border-stone-200 bg-white p-6">
+            <div className="flex items-center justify-center gap-5 overflow-visible py-4 text-4xl font-semibold">
+              <RhythmSlot>
+                <div className="flex flex-col items-center">
+                  <RhythmGlyph item={question.left} />
+                  {feedback === "incorrect" && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.left.beats)}</span>}
+                </div>
+              </RhythmSlot>
+
+              <span className="min-w-[44px] text-center leading-none">{question.operator}</span>
+
+              <RhythmSlot>
+                <div className="flex flex-col items-center">
+                  <RhythmGlyph item={question.right} />
+                  {feedback === "incorrect" && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.right.beats)}</span>}
+                </div>
+              </RhythmSlot>
+
+              <span className="leading-none">=</span>
+
+              <div className="flex flex-col items-center self-center -mt-5">
+                <label className="mb-1 text-sm font-semibold text-stone-700">Enter your answer here:</label>
+                <input
+                  value={answerText}
+                  onChange={handleInput}
+                  inputMode="decimal"
+                  disabled={Boolean(feedback)}
+                  className={`w-32 rounded-xl border bg-white px-3 py-2 text-center text-2xl font-semibold outline-none ${inputColour}`}
+                />
+              </div>
+            </div>
+
+            {feedback === "incorrect" && (
+              <div className="mt-4 text-center text-sm">
+                <span className="font-semibold text-red-700">Your answer: {answerText}</span>
+                <span className="mx-2 text-stone-400">|</span>
+                <span className="font-semibold text-green-700">Correct answer: {formatBeat(question.answer)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex justify-center">
+            <button type="button" disabled={!hasAnswer || Boolean(feedback) || !settingsValid} onClick={confirmAnswer} className={`rounded-xl px-6 py-3 font-semibold ${hasAnswer && !feedback && settingsValid ? "bg-stone-950 text-white hover:bg-stone-800" : "bg-stone-200 text-stone-500 cursor-not-allowed"}`}>Confirm</button>
+          </div>
+
+          <Feedback feedback={feedback} correct={lastCorrect} />
+          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Rhythms />);
+  </script>
+</body>
+</html>
