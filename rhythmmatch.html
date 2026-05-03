@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rhythm Groups</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useEffect, useMemo, useState } = React;
+
+// =====================================================
+// Rhythms — Game 2: Rhythm Groups
+// Clean rebuild
+// =====================================================
+
+const NOTE_RX = 7;
+const NOTE_RY = 5;
+const STEM_LENGTH = 34;
+const LINE_GAP = 10;
+
+const RHYTHMS = {
+  semibreve: { label: "Semibreve", beats: 4, open: true, stem: false, dots: 0, rest: "semibreve-rest" },
+  "dotted-minim": { label: "Dotted minim", beats: 3, open: true, stem: true, dots: 1, rest: "dotted-minim-rest" },
+  minim: { label: "Minim", beats: 2, open: true, stem: true, dots: 0, rest: "minim-rest" },
+  "dotted-crotchet": { label: "Dotted crotchet", beats: 1.5, open: false, stem: true, dots: 1, rest: "dotted-crotchet-rest" },
+  crotchet: { label: "Crotchet", beats: 1, open: false, stem: true, dots: 0, rest: "crotchet-rest" },
+  quaver: { label: "Quaver", beats: 0.5, open: false, stem: true, dots: 0, flag: true, beams: 1, rest: "quaver-rest" },
+  semiquaver: { label: "Semiquaver", beats: 0.25, open: false, stem: true, dots: 0, flag: true, beams: 2, rest: "semiquaver-rest" },
+};
+
+const RHYTHM_IDS = ["semibreve", "dotted-minim", "minim", "dotted-crotchet", "crotchet", "quaver", "semiquaver"];
+
+const SLOT_TYPES = [
+  { id: "name", label: "Name" },
+  { id: "symbol", label: "Symbol" },
+  { id: "value", label: "Beats" },
+  { id: "rest", label: "Rest" },
+];
+
+function formatBeat(value) {
+  return `${value} beats`;
+}
+
+function shuffle(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function makeCards() {
+  return shuffle(
+    RHYTHM_IDS.flatMap((rhythmId) => {
+      const rhythm = RHYTHMS[rhythmId];
+      return [
+        { id: `${rhythmId}:name`, rhythmId, slotType: "name", contentType: "text", text: rhythm.label },
+        { id: `${rhythmId}:symbol`, rhythmId, slotType: "symbol", contentType: "note", rhythm: rhythmId },
+        { id: `${rhythmId}:value`, rhythmId, slotType: "value", contentType: "text", text: formatBeat(rhythm.beats) },
+        { id: `${rhythmId}:rest`, rhythmId, slotType: "rest", contentType: "rest", rhythm: rhythm.rest },
+      ];
+    })
+  );
+}
+
+function makeInitialSlots() {
+  const slots = {};
+  RHYTHM_IDS.forEach((_, rowIndex) => {
+    SLOT_TYPES.forEach((slot) => {
+      slots[`row-${rowIndex}:${slot.id}`] = null;
+    });
+  });
+  return slots;
+}
+
+function secondsToTime(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
+  const middleY = systemTop + LINE_GAP * 2;
+
+  if (rhythm === "semibreve-rest") {
+    return (
+      <g>
+        <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP} y2={systemTop + LINE_GAP} stroke={colour} strokeWidth="1.4" />
+        <rect x={x - 8} y={systemTop + LINE_GAP} width="16" height="5" fill={colour} />
+      </g>
+    );
+  }
+
+  if (rhythm === "minim-rest" || rhythm === "dotted-minim-rest") {
+    return (
+      <g>
+        <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP * 2} y2={systemTop + LINE_GAP * 2} stroke={colour} strokeWidth="1.4" />
+        <rect x={x - 8} y={systemTop + LINE_GAP * 2 - 5} width="16" height="5" fill={colour} />
+        {rhythm === "dotted-minim-rest" && <circle cx={x + 14} cy={systemTop + LINE_GAP * 2 - 4} r="2.1" fill={colour} />}
+      </g>
+    );
+  }
+
+  if (rhythm === "crotchet-rest" || rhythm === "dotted-crotchet-rest") {
+    const d = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`;
+    return (
+      <g>
+        <path d={d} fill="none" stroke={colour} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+        {rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2.1" fill={colour} />}
+      </g>
+    );
+  }
+
+  const topY = middleY - 6;
+  const bottomY = middleY + 10;
+
+  if (rhythm === "semiquaver-rest") {
+    return (
+      <g stroke={colour} strokeWidth="2" strokeLinecap="round" fill="none">
+        <line x1={x - 3} y1={topY} x2={x + 3} y2={topY} />
+        <line x1={x + 3} y1={topY} x2={x - 1} y2={bottomY} />
+        <circle cx={x - 5} cy={topY - 1} r="2" fill={colour} stroke="none" />
+        <line x1={x - 3} y1={topY + 8} x2={x + 1} y2={topY + 8} />
+        <circle cx={x - 4} cy={topY + 7} r="1.8" fill={colour} stroke="none" />
+      </g>
+    );
+  }
+
+  return (
+    <g stroke={colour} strokeWidth="1.9" strokeLinecap="round" fill="none">
+      <line x1={x - 3} y1={topY} x2={x + 2} y2={topY} />
+      <line x1={x + 2} y1={topY} x2={x - 1} y2={bottomY} />
+      <circle cx={x - 4} cy={topY - 1} r="1.9" fill={colour} stroke="none" />
+    </g>
+  );
+}
+
+function Flag({ stemX, stemEndY, beams = 1, colour = "currentColor" }) {
+  const primaryPath = `M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY + 5}, ${stemX + 12} ${stemEndY + 14}, ${stemX + 3} ${stemEndY + 18}`;
+  const secondaryPath = `M ${stemX} ${stemEndY + 7} C ${stemX + 10} ${stemEndY + 10}, ${stemX + 10} ${stemEndY + 18}, ${stemX + 3} ${stemEndY + 22}`;
+
+  return (
+    <g>
+      <path d={primaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />
+      {beams === 2 && <path d={secondaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}
+    </g>
+  );
+}
+
+function Note({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
+  const info = RHYTHMS[rhythm];
+  const y = systemTop + LINE_GAP * 2 + 10;
+  const stemX = x + NOTE_RX;
+  const stemEndY = y - STEM_LENGTH;
+  const dotY = y - 5;
+
+  return (
+    <g>
+      <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
+      {info.stem && <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.6" />}
+      {info.dots === 1 && <circle cx={x + 13} cy={dotY} r="2.2" fill={colour} />}
+      {info.flag && <Flag stemX={stemX} stemEndY={stemEndY} colour={colour} beams={info.beams ?? 1} />}
+    </g>
+  );
+}
+
+function SymbolGlyph({ card }) {
+  return (
+    <svg viewBox="0 0 90 80" className="h-16 w-24 overflow-visible mx-auto">
+      {card.contentType === "note" && <Note rhythm={card.rhythm} x={42} systemTop={12} />}
+      {card.contentType === "rest" && <Rest rhythm={card.rhythm} x={42} systemTop={12} />}
+    </svg>
+  );
+}
+
+function TextCard({ text }) {
+  if (text === "Dotted crotchet") {
+    return (
+      <span className="text-center text-sm font-semibold leading-tight">
+        Dotted<br />crotchet
+      </span>
+    );
+  }
+
+  return <span className="text-center text-sm font-semibold">{text}</span>;
+}
+
+function CardContent({ card }) {
+  if (!card) return null;
+  if (card.contentType === "text") return <TextCard text={card.text} />;
+  return <SymbolGlyph card={card} />;
+}
+
+function rowCards(rowIndex, slots, cardsById) {
+  return SLOT_TYPES.map((slot) => {
+    const cardId = slots[`row-${rowIndex}:${slot.id}`];
+    return cardId ? cardsById[cardId] : null;
+  });
+}
+
+function getRowCardsWithSlots(rowIndex, slots, cardsById) {
+  return SLOT_TYPES.map((slot) => {
+    const slotKey = `row-${rowIndex}:${slot.id}`;
+    const cardId = slots[slotKey];
+    return { slot, card: cardId ? cardsById[cardId] : null };
+  });
+}
+
+function getMostCommonRhythmId(rowItems) {
+  const counts = {};
+  rowItems.forEach(({ card }) => {
+    if (!card) return;
+    counts[card.rhythmId] = (counts[card.rhythmId] || 0) + 1;
+  });
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return null;
+  if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) return null;
+  return sorted[0][0];
+}
+
+function getRowStatus(rowIndex, slots, cardsById, checked) {
+  if (!checked) return "neutral";
+  const rowItems = getRowCardsWithSlots(rowIndex, slots, cardsById);
+  if (rowItems.some(({ card }) => !card)) return "neutral";
+
+  const firstRhythmId = rowItems[0].card.rhythmId;
+  const sameRhythm = rowItems.every(({ card }) => card.rhythmId === firstRhythmId);
+  const correctTypes = rowItems.every(({ slot, card }) => card.slotType === slot.id);
+
+  return sameRhythm && correctTypes ? "correct" : "incorrect";
+}
+
+function getSlotStatus(rowIndex, slotId, slots, cardsById, checked) {
+  if (!checked) return "neutral";
+
+  const slotKey = `row-${rowIndex}:${slotId}`;
+  const cardId = slots[slotKey];
+  if (!cardId) return "neutral";
+
+  const card = cardsById[cardId];
+  const rowItems = getRowCardsWithSlots(rowIndex, slots, cardsById);
+  const rowRhythmId = getMostCommonRhythmId(rowItems);
+
+  const correctType = card.slotType === slotId;
+  const correctRhythm = rowRhythmId ? card.rhythmId === rowRhythmId : rowItems.every(({ card: rowCard }) => rowCard && rowCard.rhythmId === card.rhythmId);
+
+  return correctType && correctRhythm ? "correct" : "incorrect";
+}
+
+function medalForTime(seconds) {
+  if (seconds < 60) return { emoji: "🥇", label: "Gold", colour: "text-yellow-600", bg: "bg-yellow-50", border: "border-yellow-300" };
+  if (seconds < 90) return { emoji: "🥈", label: "Silver", colour: "text-slate-500", bg: "bg-slate-50", border: "border-slate-300" };
+  if (seconds < 120) return { emoji: "🥉", label: "Bronze", colour: "text-amber-700", bg: "bg-amber-50", border: "border-amber-300" };
+  return null;
+}
+
+function MedalTargets() {
+  return (
+    <div className="mb-5 grid gap-2 text-center sm:grid-cols-3">
+      <div className="rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-2 font-semibold text-yellow-700">
+        <span className="mr-2 text-xl">🥇</span>Gold: under 1:00
+      </div>
+      <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-2 font-semibold text-slate-600">
+        <span className="mr-2 text-xl">🥈</span>Silver: under 1:30
+      </div>
+      <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 font-semibold text-amber-700">
+        <span className="mr-2 text-xl">🥉</span>Bronze: under 2:00
+      </div>
+    </div>
+  );
+}
+
+function runTests() {
+  const cards = makeCards();
+  console.assert(cards.length === RHYTHM_IDS.length * SLOT_TYPES.length, "Incorrect number of cards generated.");
+  console.assert(new Set(cards.map((card) => card.id)).size === cards.length, "Card IDs must be unique.");
+
+  const slots = makeInitialSlots();
+  console.assert(Object.keys(slots).length === RHYTHM_IDS.length * SLOT_TYPES.length, "Incorrect number of slots generated.");
+}
+
+runTests();
+
+function RhythmGroups() {
+  const [cards, setCards] = useState(() => makeCards());
+  const cardsById = useMemo(() => Object.fromEntries(cards.map((card) => [card.id, card])), [cards]);
+  const [slots, setSlots] = useState(() => makeInitialSlots());
+  const [pool, setPool] = useState(() => cards.map((card) => card.id));
+  const [draggedCardId, setDraggedCardId] = useState(null);
+  const [dragSource, setDragSource] = useState(null);
+  const [checked, setChecked] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!started || success) return undefined;
+    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [started, success]);
+
+  const allPlaced = Object.values(slots).every(Boolean);
+
+  function beginIfNeeded() {
+    if (!started) setStarted(true);
+  }
+
+  function resetGame() {
+    const freshCards = makeCards();
+    setCards(freshCards);
+    setSlots(makeInitialSlots());
+    setPool(freshCards.map((card) => card.id));
+    setDraggedCardId(null);
+    setDragSource(null);
+    setChecked(false);
+    setSuccess(false);
+    setStarted(false);
+    setElapsed(0);
+  }
+
+  function startDrag(cardId, source) {
+    setDraggedCardId(cardId);
+    setDragSource(source);
+  }
+
+  function clearDrag() {
+    setDraggedCardId(null);
+    setDragSource(null);
+  }
+
+  function removeDraggedCard(currentSlots, currentPool) {
+    let nextSlots = { ...currentSlots };
+    let nextPool = [...currentPool];
+
+    if (!draggedCardId || !dragSource) return { nextSlots, nextPool };
+
+    if (dragSource.type === "pool") {
+      nextPool = nextPool.filter((id) => id !== draggedCardId);
+    }
+
+    if (dragSource.type === "slot") {
+      nextSlots[dragSource.slotKey] = null;
+    }
+
+    return { nextSlots, nextPool };
+  }
+
+  function dropOnSlot(targetSlotKey) {
+    if (!draggedCardId) return;
+    beginIfNeeded();
+    setChecked(false);
+
+    setSlots((currentSlots) => {
+      const currentPool = pool;
+      let { nextSlots, nextPool } = removeDraggedCard(currentSlots, currentPool);
+      const displacedCardId = nextSlots[targetSlotKey];
+
+      if (displacedCardId) {
+        if (dragSource?.type === "slot") {
+          nextSlots[dragSource.slotKey] = displacedCardId;
+        } else {
+          nextPool.push(displacedCardId);
+        }
+      }
+
+      nextSlots[targetSlotKey] = draggedCardId;
+      setPool(nextPool);
+      return nextSlots;
+    });
+
+    clearDrag();
+  }
+
+  function dropOnPool() {
+    if (!draggedCardId) return;
+    beginIfNeeded();
+    setChecked(false);
+
+    setSlots((currentSlots) => {
+      let { nextSlots, nextPool } = removeDraggedCard(currentSlots, pool);
+      if (!nextPool.includes(draggedCardId)) nextPool.push(draggedCardId);
+      setPool(nextPool);
+      return nextSlots;
+    });
+
+    clearDrag();
+  }
+
+  function confirm() {
+    if (!allPlaced) return;
+    setChecked(true);
+
+    const allCorrect = RHYTHM_IDS.every((_, rowIndex) => getRowStatus(rowIndex, slots, cardsById, true) === "correct");
+    setSuccess(allCorrect);
+  }
+
+  function renderCard(cardId, source) {
+    const card = cardsById[cardId];
+    if (!card) return null;
+
+    return (
+      <div
+        key={cardId}
+        draggable
+        onDragStart={() => startDrag(cardId, source)}
+        onDragEnd={clearDrag}
+        className="flex min-h-[64px] min-w-[118px] cursor-grab items-center justify-center rounded-xl border border-stone-300 bg-white px-3 py-2 text-center shadow-sm active:cursor-grabbing"
+      >
+        <CardContent card={card} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
+      <div className="mx-auto max-w-7xl">
+        <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Rhythms</h1>
+              <p className="mt-2 text-stone-700">Group the matching rhythm information together.</p>
+            </div>
+            <div className="rounded-xl border bg-stone-50 px-5 py-3 text-center">
+              <div className="text-xs uppercase tracking-wide text-stone-500">Timer</div>
+              <div className="text-2xl font-semibold">{secondsToTime(elapsed)}</div>
+            </div>
+          </div>
+        </header>
+
+        <MedalTargets />
+
+        {success && (() => {
+          const medal = medalForTime(elapsed);
+          return (
+            <div className={`mb-4 rounded-xl border p-4 text-center font-semibold ${medal ? `${medal.bg} ${medal.border} ${medal.colour}` : "border-green-300 bg-green-50 text-green-800"}`}>
+              {medal && <span className="mr-2 text-2xl">{medal.emoji}</span>}
+              Well done! You got it right in {secondsToTime(elapsed)}. Can you beat this time in your next attempt?
+            </div>
+          );
+        })()}
+
+        {checked && !success && (
+          <div className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-center font-semibold text-red-800">
+            Some cards are incorrect. Try again.
+          </div>
+        )}
+
+        <main className="grid gap-4 lg:grid-cols-[1fr_320px]">
+          <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 grid grid-cols-4 gap-2 text-center text-sm font-semibold text-stone-600">
+              {SLOT_TYPES.map((slot) => <div key={slot.id}>{slot.label}</div>)}
+            </div>
+
+            <div className="space-y-2">
+              {RHYTHM_IDS.map((_, rowIndex) => (
+                <div key={rowIndex} className="grid grid-cols-4 gap-2">
+                  {SLOT_TYPES.map((slot) => {
+                    const slotKey = `row-${rowIndex}:${slot.id}`;
+                    const cardId = slots[slotKey];
+                    const status = getSlotStatus(rowIndex, slot.id, slots, cardsById, checked);
+                    const statusClass = status === "correct"
+                      ? "border-green-500 ring-2 ring-green-500 animate-pulse"
+                      : status === "incorrect"
+                      ? "border-red-500 ring-2 ring-red-500 animate-pulse"
+                      : "border-stone-300";
+
+                    return (
+                      <div
+                        key={slotKey}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => dropOnSlot(slotKey)}
+                        className={`flex min-h-[78px] items-center justify-center rounded-xl border-2 bg-stone-50 p-2 ${statusClass}`}
+                      >
+                        {cardId ? renderCard(cardId, { type: "slot", slotKey }) : <span className="text-xs text-stone-400">Drop here</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <aside className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-center text-lg font-semibold">Cards</h2>
+            <div
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={dropOnPool}
+              className="flex min-h-[480px] flex-wrap content-start gap-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-3"
+            >
+              {pool.map((cardId) => renderCard(cardId, { type: "pool" }))}
+            </div>
+          </aside>
+        </main>
+
+        <div className="mt-4 flex justify-center gap-2">
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={!allPlaced || success}
+            className={`rounded-xl px-6 py-3 font-semibold ${allPlaced && !success ? "bg-stone-950 text-white hover:bg-stone-800" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}
+          >
+            Confirm
+          </button>
+
+          {success && (
+            <button type="button" onClick={resetGame} className="rounded-xl bg-green-600 px-6 py-3 font-semibold text-white hover:bg-green-700">
+              Play again
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<RhythmGroups />);
+  </script>
+</body>
+</html>
