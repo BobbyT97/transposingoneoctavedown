@@ -1,0 +1,754 @@
+import React, { useMemo, useRef, useState } from "react";
+
+// =====================================================
+// Tonic, Subdominant and Dominant
+// Clean, stable rebuild
+// =====================================================
+
+const VIEWBOX_WIDTH = 920;
+const VIEWBOX_HEIGHT = 340;
+const STAFF_LEFT = 24;
+const STAFF_RIGHT = 896;
+const STAFF_TOP = 138;
+const LINE_GAP = 11.2;
+const NOTE_RX = 6.6;
+const NOTE_RY = 4.7;
+const STEM_LENGTH = 31;
+const BAR_COUNT = 4;
+
+const CLEF_X = STAFF_LEFT + 8;
+const KEY_SIG_X = STAFF_LEFT + 46;
+const TIME_SIG_X = STAFF_LEFT + 82;
+const MUSIC_START_X = STAFF_LEFT + 112;
+
+const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const NOTE_STEPS = {
+  C4: -2,
+  D4: -1,
+  E4: 0,
+  F4: 1,
+  G4: 2,
+  A4: 3,
+  B4: 4,
+  C5: 5,
+  D5: 6,
+  E5: 7,
+  F5: 8,
+  G5: 9,
+  A5: 10,
+};
+
+const KEYS = [
+  {
+    id: "c-major",
+    label: "C major",
+    signature: "none",
+    scale: ["C", "D", "E", "F", "G", "A", "B"],
+    tonic: "C",
+    subdominant: "F",
+    dominant: "G",
+    tonicStart: "C4",
+    pool: ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5"],
+  },
+  {
+    id: "g-major",
+    label: "G major",
+    signature: "sharp",
+    scale: ["G", "A", "B", "C", "D", "E", "F#"],
+    tonic: "G",
+    subdominant: "C",
+    dominant: "D",
+    tonicStart: "G4",
+    pool: ["C4", "D4", "E4", "F#4", "G4", "A4", "B4", "C5", "D5", "E5", "F#5", "G5", "A5"],
+  },
+  {
+    id: "f-major",
+    label: "F major",
+    signature: "flat",
+    scale: ["F", "G", "A", "Bb", "C", "D", "E"],
+    tonic: "F",
+    subdominant: "Bb",
+    dominant: "C",
+    tonicStart: "F4",
+    pool: ["C4", "D4", "E4", "F4", "G4", "A4", "Bb4", "C5", "D5", "E5", "F5", "G5", "A5"],
+  },
+  {
+    id: "a-minor",
+    label: "A minor",
+    signature: "none",
+    scale: ["A", "B", "C", "D", "E", "F", "G#"],
+    tonic: "A",
+    subdominant: "D",
+    dominant: "E",
+    tonicStart: "A4",
+    pool: ["C4", "D4", "E4", "F4", "G#4", "A4", "B4", "C5", "D5", "E5", "F5", "G#5", "A5"],
+  },
+];
+
+const QUESTION_TYPES = [
+  { id: "tonic", label: "tonic" },
+  { id: "subdominant", label: "subdominant" },
+  { id: "dominant", label: "dominant" },
+];
+
+const RHYTHMS = {
+  semibreve: { beats: 4, spacing: 8, open: true, stem: false, dots: 0, flag: false },
+  minim: { beats: 2, spacing: 4, open: true, stem: true, dots: 0, flag: false },
+  "dotted-crotchet": { beats: 1.5, spacing: 3.1, open: false, stem: true, dots: 1, flag: false },
+  crotchet: { beats: 1, spacing: 2.25, open: false, stem: true, dots: 0, flag: false },
+  quaver: { beats: 0.5, spacing: 1.45, open: false, stem: true, dots: 0, flag: true },
+};
+
+const BAR_PATTERNS = [
+  ["minim", "crotchet", "crotchet"],
+  ["crotchet", "crotchet", "minim"],
+  ["minim", "minim"],
+  ["crotchet", "crotchet", "crotchet", "crotchet"],
+  ["dotted-crotchet", "quaver", "crotchet", "crotchet"],
+  ["crotchet", "crotchet", "dotted-crotchet", "quaver"],
+  ["dotted-crotchet", "quaver", "dotted-crotchet", "quaver"],
+  ["dotted-crotchet", "quaver", "minim"],
+  ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
+  ["quaver", "quaver", "quaver", "quaver", "minim"],
+  ["crotchet", "quaver", "quaver", "quaver", "quaver", "crotchet"],
+  ["minim", "quaver", "quaver", "quaver", "quaver"],
+];
+
+const FINAL_BAR_PATTERNS = [...BAR_PATTERNS, ["semibreve"]];
+
+function randomItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function stripAccidental(pitch) {
+  return pitch.replace(/[b#]/g, "");
+}
+
+function pitchName(pitch) {
+  return pitch.replace(/[0-9]/g, "");
+}
+
+function staffStep(pitch) {
+  return NOTE_STEPS[stripAccidental(pitch)] ?? NOTE_STEPS.C5;
+}
+
+function yForStep(step, staffTop = STAFF_TOP) {
+  return staffTop + LINE_GAP * 4 - step * (LINE_GAP / 2);
+}
+
+function stemGoesDown(step) {
+  return step > 4;
+}
+
+function rhythmInfo(rhythm) {
+  return RHYTHMS[rhythm] ?? RHYTHMS.crotchet;
+}
+
+function nearestPoolIndex(pool, previousPitch) {
+  const previous = pitchName(previousPitch);
+  const exact = pool.findIndex((pitch) => pitchName(pitch) === previous);
+  return exact >= 0 ? exact : Math.floor(pool.length / 2);
+}
+
+function chooseNextPitch(pool, previousPitch, isQuaverGroupNote = false, avoidRepeat = false) {
+  const index = nearestPoolIndex(pool, previousPitch);
+
+  if (isQuaverGroupNote) {
+    const stepCandidates = [-1, 1]
+      .map((move) => pool[index + move])
+      .filter(Boolean)
+      .filter((pitch) => pitchName(pitch) !== pitchName(previousPitch))
+      .filter((pitch) => Math.abs(staffStep(pitch) - staffStep(previousPitch)) <= 1);
+
+    return stepCandidates.length > 0 ? randomItem(stepCandidates) : previousPitch;
+  }
+
+  const moves = [-2, -1, 0, 0, 1, 2];
+  let candidates = moves
+    .map((move) => pool[Math.max(0, Math.min(pool.length - 1, index + move))])
+    .filter(Boolean);
+
+  if (avoidRepeat) {
+    candidates = candidates.filter((pitch) => pitchName(pitch) !== pitchName(previousPitch));
+  }
+
+  if (candidates.length === 0) {
+    const nonRepeats = pool.filter((pitch) => pitchName(pitch) !== pitchName(previousPitch));
+    return nonRepeats.length > 0 ? randomItem(nonRepeats) : previousPitch;
+  }
+
+  return randomItem(candidates);
+}
+
+function enforceAllQuaverGroupsStepwise(bar, key) {
+  const fixedBar = [...bar];
+  let index = 0;
+
+  while (index < fixedBar.length) {
+    if (fixedBar[index].rhythm !== "quaver") {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    while (index < fixedBar.length && fixedBar[index].rhythm === "quaver") {
+      index += 1;
+    }
+    const end = index - 1;
+
+    // Only enforce inside actual beamed groups: 2+ consecutive quavers.
+    if (end <= start) continue;
+
+    for (let noteIndex = start + 1; noteIndex <= end; noteIndex += 1) {
+      const previousPitch = fixedBar[noteIndex - 1].pitch;
+      const previousIndex = nearestPoolIndex(key.pool, previousPitch);
+      const candidates = [-1, 1]
+        .map((move) => key.pool[previousIndex + move])
+        .filter(Boolean)
+        .filter((pitch) => pitchName(pitch) !== pitchName(previousPitch))
+        .filter((pitch) => Math.abs(staffStep(pitch) - staffStep(previousPitch)) <= 1);
+
+      if (candidates.length > 0) {
+        fixedBar[noteIndex] = { ...fixedBar[noteIndex], pitch: randomItem(candidates) };
+      }
+    }
+  }
+
+  return fixedBar;
+}
+
+function barPassesQuaverRules(bar) {
+  for (let index = 0; index < bar.length - 1; index += 1) {
+    const current = bar[index];
+    const next = bar[index + 1];
+
+    if (current.rhythm === "quaver" && next.rhythm === "quaver") {
+      if (pitchName(current.pitch) === pitchName(next.pitch)) return false;
+      if (Math.abs(staffStep(current.pitch) - staffStep(next.pitch)) > 1) return false;
+    }
+  }
+
+  return true;
+}
+
+function questionPassesQuaverRules(question) {
+  return question.bars.every((bar) => barPassesQuaverRules(bar));
+}
+
+function makeBarPattern(barIndex) {
+  return randomItem(barIndex === BAR_COUNT - 1 ? FINAL_BAR_PATTERNS : BAR_PATTERNS);
+}
+
+function targetFor(questionType, key) {
+  if (questionType.id === "tonic") return key.tonic;
+  if (questionType.id === "subdominant") return key.subdominant;
+  return key.dominant;
+}
+
+function makeQuestion() {
+  const key = randomItem(KEYS);
+  const questionType = randomItem(QUESTION_TYPES);
+  const bars = [];
+  let previousPitch = key.tonicStart;
+  let hasGSharp = false;
+
+  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
+    const pattern = makeBarPattern(barIndex);
+    const bar = [];
+
+    pattern.forEach((rhythm, noteIndex) => {
+      const previousRhythm = noteIndex > 0 ? pattern[noteIndex - 1] : null;
+      const nextRhythm = noteIndex < pattern.length - 1 ? pattern[noteIndex + 1] : null;
+      const inQuaverGroup = rhythm === "quaver" && (previousRhythm === "quaver" || nextRhythm === "quaver");
+      const avoidRepeat = rhythm === "quaver" && previousRhythm === "quaver";
+      const pitch = barIndex === 0 && noteIndex === 0
+        ? key.tonicStart
+        : chooseNextPitch(key.pool, previousPitch, inQuaverGroup, avoidRepeat);
+
+      if (key.id === "a-minor" && pitch.includes("G#")) hasGSharp = true;
+
+      bar.push({
+        id: `note-${barIndex}-${noteIndex}`,
+        pitch,
+        rhythm,
+        barIndex,
+        noteIndex,
+      });
+
+      previousPitch = pitch;
+    });
+
+    bars.push(enforceAllQuaverGroupsStepwise(bar, key));
+  }
+
+  if (key.id === "a-minor" && !hasGSharp) {
+    const nonQuavers = [];
+    bars.forEach((bar, barIndex) => {
+      bar.forEach((note, noteIndex) => {
+        if (note.rhythm !== "quaver") nonQuavers.push({ barIndex, noteIndex });
+      });
+    });
+    const chosen = randomItem(nonQuavers);
+    bars[chosen.barIndex][chosen.noteIndex] = { ...bars[chosen.barIndex][chosen.noteIndex], pitch: "G#5" };
+  }
+
+  const target = targetFor(questionType, key);
+  const hasTarget = bars.some((bar) => bar.some((note) => pitchName(note.pitch) === target));
+
+  if (!hasTarget) {
+    const nonQuavers = [];
+    bars.forEach((bar, barIndex) => {
+      bar.forEach((note, noteIndex) => {
+        if (note.rhythm !== "quaver") nonQuavers.push({ barIndex, noteIndex });
+      });
+    });
+
+    const chosen = randomItem(nonQuavers);
+    const currentPitch = bars[chosen.barIndex][chosen.noteIndex].pitch;
+    const octave = currentPitch.replace(/[^0-9]/g, "") || "4";
+    bars[chosen.barIndex][chosen.noteIndex] = { ...bars[chosen.barIndex][chosen.noteIndex], pitch: `${target}${octave}` };
+  }
+
+  const finalQuestion = { key, questionType, bars: bars.map((bar) => enforceAllQuaverGroupsStepwise(bar, key)) };
+
+  // Absolute final safety check: if anything still breaks the quaver rule, regenerate.
+  if (!questionPassesQuaverRules(finalQuestion)) {
+    return makeQuestion();
+  }
+
+  return finalQuestion;
+}
+
+function isTargetNote(question, note) {
+  return pitchName(note.pitch) === targetFor(question.questionType, question.key);
+}
+
+function allNotes(question) {
+  return question.bars.flat();
+}
+
+function accidentalIsInKeySignature(key, pitch) {
+  const name = pitchName(pitch);
+  return (key.id === "g-major" && name === "F#") || (key.id === "f-major" && name === "Bb");
+}
+
+function shouldShowAccidental(key, pitch, accidentalState) {
+  if (!(pitch.includes("#") || pitch.includes("b"))) return false;
+  if (accidentalIsInKeySignature(key, pitch)) return false;
+
+  const accidentalId = `${pitch[0]}:${pitchName(pitch)}`;
+  if (accidentalState.has(accidentalId)) return false;
+  accidentalState.add(accidentalId);
+  return true;
+}
+
+function calculateBarPositions(bar, startX, endX) {
+  const totalSpacing = bar.reduce((sum, note, index) => {
+    const isGroupedQuaver = note.rhythm === "quaver" && (bar[index - 1]?.rhythm === "quaver" || bar[index + 1]?.rhythm === "quaver");
+    const boost = isGroupedQuaver ? 1.15 : 1;
+    const accidentalSpace = note.pitch.includes("#") || note.pitch.includes("b") ? 0.45 : 0;
+    return sum + rhythmInfo(note.rhythm).spacing * boost + accidentalSpace;
+  }, 0);
+
+  const unit = Math.max(1, endX - startX - 18) / Math.max(1, totalSpacing);
+  let cursor = startX + 12;
+
+  return bar.map((note, index) => {
+    if (note.pitch.includes("#") || note.pitch.includes("b")) cursor += unit * 0.45;
+    const x = cursor;
+    const isGroupedQuaver = note.rhythm === "quaver" && (bar[index - 1]?.rhythm === "quaver" || bar[index + 1]?.rhythm === "quaver");
+    const boost = isGroupedQuaver ? 1.15 : 1;
+    cursor += rhythmInfo(note.rhythm).spacing * unit * boost;
+    return x;
+  });
+}
+
+function getLayout(question) {
+  const barWidth = (STAFF_RIGHT - MUSIC_START_X) / BAR_COUNT;
+  const positions = {};
+
+  question.bars.forEach((bar, barIndex) => {
+    const startX = MUSIC_START_X + barIndex * barWidth + 10;
+    const endX = MUSIC_START_X + (barIndex + 1) * barWidth - 7;
+    const xs = calculateBarPositions(bar, startX, endX);
+
+    bar.forEach((note, noteIndex) => {
+      const step = staffStep(note.pitch);
+      positions[note.id] = { x: xs[noteIndex], y: yForStep(step), step };
+    });
+  });
+
+  return { positions, barWidth };
+}
+
+function StaffLines() {
+  return (
+    <g>
+      {[0, 1, 2, 3, 4].map((line) => (
+        <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={STAFF_TOP + line * LINE_GAP} y2={STAFF_TOP + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />
+      ))}
+    </g>
+  );
+}
+
+function TrebleClef() {
+  return <text x={CLEF_X} y={STAFF_TOP + 33} fontSize="90" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>;
+}
+
+function KeySignature({ signature, x = KEY_SIG_X, staffTop = STAFF_TOP, scale = 1 }) {
+  if (signature === "sharp") return <text x={x} y={yForStep(8, staffTop) + 8} fontSize={28 * scale} fontFamily="serif" fontWeight="900">♯</text>;
+  if (signature === "flat") return <text x={x - 6} y={yForStep(4, staffTop) + 6} fontSize={27 * scale} fontFamily="serif" fontWeight="900">♭</text>;
+  return null;
+}
+
+function TimeSignature() {
+  return (
+    <g fontFamily="serif" fontWeight="900" fontSize="36" textAnchor="middle">
+      <text x={TIME_SIG_X} y={STAFF_TOP + 24}>4</text>
+      <text x={TIME_SIG_X} y={STAFF_TOP + 44}>4</text>
+    </g>
+  );
+}
+
+function LedgerLines({ x, step, colour = "currentColor" }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2));
+  if (step >= 10) lines.push(yForStep(10));
+  return <g>{lines.map((lineY) => <line key={lineY} x1={x - 14} x2={x + 14} y1={lineY} y2={lineY} stroke={colour} strokeWidth="1.2" />)}</g>;
+}
+
+function Flag({ stemX, stemEndY, stemDown, colour = "currentColor" }) {
+  const path = stemDown
+    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 5}, ${stemX + 9} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 15}`
+    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 5}, ${stemX + 9} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 15}`;
+
+  return <path d={path} fill="none" stroke={colour} strokeWidth="1.6" strokeLinecap="round" />;
+}
+
+function stemData(note, x, y, stemDownOverride = null, forcedStemEndY = null) {
+  const step = staffStep(note.pitch);
+  const stemDown = stemDownOverride ?? stemGoesDown(step);
+  let stemX = stemDown ? x - NOTE_RX + 2 : x + NOTE_RX;
+
+  if (stemDown) {
+    if (note.rhythm === "minim") stemX -= 2;
+    else if (note.rhythm === "quaver") stemX -= 2;
+    else if (note.rhythm === "crotchet" || note.rhythm === "dotted-crotchet") stemX -= 1;
+  }
+
+  const naturalStemEndY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH;
+  return { step, stemDown, stemX, stemEndY: forcedStemEndY ?? naturalStemEndY };
+}
+
+function NoteGlyph({ note, x, y, selected, hovered, correct, incorrect, showAccidental, forcedStemEndY = null, stemDownOverride = null, showFlag = true, onHover, onLeave, onClick }) {
+  const info = rhythmInfo(note.rhythm);
+  const stem = stemData(note, x, y, stemDownOverride, forcedStemEndY);
+  const colour = incorrect ? "#dc2626" : correct || selected || hovered ? "#16a34a" : "currentColor";
+  const accidental = note.pitch.includes("#") ? "♯" : note.pitch.includes("b") ? "♭" : null;
+  const dotY = Math.abs(stem.step % 2) === 1 ? y : y - 5;
+
+  return (
+    <g onMouseEnter={onHover} onMouseLeave={onLeave} onClick={onClick} style={{ cursor: "pointer" }}>
+      <rect x={x - 19} y={STAFF_TOP - 38} width="38" height="116" fill="transparent" />
+      {showAccidental && accidental && <text x={x - 23} y={y + 7} fontSize="22" fontFamily="serif" fontWeight="700" fill={colour}>{accidental}</text>}
+      <LedgerLines x={x} step={stem.step} colour={colour} />
+      <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
+      {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="1.6" />}
+      {info.dots === 1 && <circle cx={x + 15} cy={dotY} r="2.2" fill={colour} />}
+      {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stem.stemEndY} stemDown={stem.stemDown} colour={colour} />}
+    </g>
+  );
+}
+
+function getQuaverGroup(bar, noteIndex) {
+  if (bar[noteIndex]?.rhythm !== "quaver") return null;
+  let start = noteIndex;
+  let end = noteIndex;
+  while (start > 0 && bar[start - 1]?.rhythm === "quaver") start -= 1;
+  while (end < bar.length - 1 && bar[end + 1]?.rhythm === "quaver") end += 1;
+  return end > start ? { start, end } : null;
+}
+
+function getBeamLineYAtX(x, start, end) {
+  if (!start || !end || start.x === end.x) return start?.y ?? end?.y ?? 0;
+  return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y);
+}
+
+function getBeamData(bar, group, positions, layout) {
+  const notes = bar.slice(group.start, group.end + 1);
+  const xs = positions.slice(group.start, group.end + 1);
+  const steps = notes.map((note) => staffStep(note.pitch));
+  const averageStep = steps.reduce((sum, step) => sum + step, 0) / steps.length;
+  const stemDown = averageStep > 4;
+  const stems = notes.map((note, index) => stemData(note, xs[index], layout.positions[note.id].y, stemDown));
+  const directions = steps.slice(1).map((step, index) => Math.sign(step - steps[index])).filter((direction) => direction !== 0);
+  const changesDirection = directions.some((direction, index) => index > 0 && direction !== directions[index - 1]);
+  const isStepwise = steps.every((step, index) => index === 0 || Math.abs(step - steps[index - 1]) <= 2);
+  const extend = 0.5;
+
+  if (changesDirection || !isStepwise) {
+    const anchorY = stems.reduce((sum, stem) => sum + stem.stemEndY, 0) / stems.length;
+    return { stemDown, start: { x: stems[0].stemX - extend, y: anchorY }, end: { x: stems[stems.length - 1].stemX + extend, y: anchorY } };
+  }
+
+  const sortedSteps = [...steps].sort((a, b) => a - b);
+  const anchorStep = sortedSteps[Math.floor(sortedSteps.length / 2)];
+  const anchorIndex = steps.findIndex((step) => step === anchorStep);
+  const anchorStem = stems[anchorIndex];
+  const firstStem = stems[0];
+  const lastStem = stems[stems.length - 1];
+  const slope = Math.max(-4, Math.min(4, (steps[steps.length - 1] - steps[0]) * -1.2));
+  const slopePerX = slope / Math.max(1, lastStem.stemX - firstStem.stemX);
+
+  return {
+    stemDown,
+    start: { x: firstStem.stemX - extend, y: anchorStem.stemEndY - slopePerX * (anchorStem.stemX - firstStem.stemX) },
+    end: { x: lastStem.stemX + extend, y: anchorStem.stemEndY + slopePerX * (lastStem.stemX - anchorStem.stemX) },
+  };
+}
+
+function Score({ question, selectedId, hoveredId, feedback, onSelect, onHover, onLeave }) {
+  const layout = useMemo(() => getLayout(question), [question]);
+  const targetIds = new Set(allNotes(question).filter((note) => isTargetNote(question, note)).map((note) => note.id));
+  const selectedCorrect = selectedId ? targetIds.has(selectedId) : false;
+
+  return (
+    <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none rounded-xl bg-white" aria-label="Tonic, subdominant and dominant exercise">
+      <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
+      <StaffLines />
+      <TrebleClef />
+      <KeySignature signature={question.key.signature} />
+      <TimeSignature />
+
+      {Array.from({ length: BAR_COUNT }, (_, index) => {
+        const x = MUSIC_START_X + layout.barWidth * (index + 1);
+        const isFinal = index === BAR_COUNT - 1;
+        return isFinal ? (
+          <g key={index}>
+            <line x1={x - 5} x2={x - 5} y1={STAFF_TOP} y2={STAFF_TOP + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />
+            <line x1={x} x2={x} y1={STAFF_TOP} y2={STAFF_TOP + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" />
+          </g>
+        ) : (
+          <line key={index} x1={x} x2={x} y1={STAFF_TOP} y2={STAFF_TOP + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.2" />
+        );
+      })}
+
+      {question.bars.map((bar, barIndex) => {
+        const positions = bar.map((note) => layout.positions[note.id].x);
+        const accidentalState = new Set();
+        const renderedBeams = new Set();
+
+        return bar.map((note, noteIndex) => {
+          const position = layout.positions[note.id];
+          const group = getQuaverGroup(bar, noteIndex);
+          const showAccidental = shouldShowAccidental(question.key, note.pitch, accidentalState);
+          let forcedStemEndY = null;
+          let stemDownOverride = null;
+          let beam = null;
+
+          if (group) {
+            beam = getBeamData(bar, group, positions, layout);
+            stemDownOverride = beam.stemDown;
+            const stem = stemData(note, position.x, position.y, beam.stemDown);
+            forcedStemEndY = getBeamLineYAtX(stem.stemX, beam.start, beam.end);
+
+            const maxStemLength = 42;
+            const minStemLength = 22;
+            const stemLength = Math.abs(forcedStemEndY - position.y);
+
+            if (stemLength > maxStemLength) {
+              forcedStemEndY = stem.stemDown ? position.y + maxStemLength : position.y - maxStemLength;
+            }
+
+            if (stemLength < minStemLength) {
+              forcedStemEndY = stem.stemDown ? position.y + minStemLength : position.y - minStemLength;
+            }
+          }
+
+          const selected = selectedId === note.id && !feedback;
+          const hovered = hoveredId === note.id && !feedback;
+          const correct = Boolean(feedback && targetIds.has(note.id));
+          const incorrect = Boolean(feedback && selectedId === note.id && !selectedCorrect);
+          const beamColour = "currentColor";
+
+          return (
+            <React.Fragment key={note.id}>
+              <NoteGlyph
+                note={note}
+                x={position.x}
+                y={position.y}
+                selected={selected}
+                hovered={hovered}
+                correct={correct}
+                incorrect={incorrect}
+                showAccidental={showAccidental}
+                forcedStemEndY={forcedStemEndY}
+                stemDownOverride={stemDownOverride}
+                showFlag={!group}
+                onHover={() => !feedback && onHover(note.id)}
+                onLeave={onLeave}
+                onClick={() => !feedback && onSelect(note.id)}
+              />
+
+              {group && group.start === noteIndex && !renderedBeams.has(`${barIndex}-${group.start}`) && (() => {
+                renderedBeams.add(`${barIndex}-${group.start}`);
+                const data = beam ?? getBeamData(bar, group, positions, layout);
+                return <line x1={data.start.x} y1={data.start.y} x2={data.end.x} y2={data.end.y} stroke={beamColour} strokeWidth="4" strokeLinecap="butt" />;
+              })()}
+            </React.Fragment>
+          );
+        });
+      })}
+    </svg>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-xl border bg-stone-50 p-3 text-center">
+      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ScaleHelp({ question }) {
+  const roman = ["I", "II", "III", "IV", "V", "VI", "VII"];
+  return (
+    <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+      <p className="text-center font-semibold">Scale degrees in {question.key.label}</p>
+      <div className="mt-4 grid grid-cols-7 gap-2 text-center text-sm">
+        {question.key.scale.map((note, index) => {
+          const label = index === 0 ? "Tonic" : index === 3 ? "Subdominant" : index === 4 ? "Dominant" : "";
+          return (
+            <div key={`${note}-${index}`} className="rounded-lg bg-white/70 px-2 py-3">
+              <div className="font-bold">{roman[index]}</div>
+              <div className="mt-2 text-lg font-semibold">{note}</div>
+              <div className="mt-2 min-h-[20px] text-xs font-semibold text-blue-900">{label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Feedback({ feedback, correct }) {
+  if (!feedback) return null;
+  return <div className={`mt-4 text-center font-semibold ${correct ? "text-green-700" : "text-red-700"}`}>{correct ? `${TICK} Correct` : `${CROSS} Incorrect`}</div>;
+}
+
+function runTests() {
+  const q = makeQuestion();
+  console.assert(q.bars.length === BAR_COUNT, "Question should generate four bars.");
+  console.assert(q.bars.every((bar) => bar.length > 0), "Every bar should contain notes.");
+  console.assert(allNotes(q).some((note) => isTargetNote(q, note)), "Every question must contain at least one correct target note.");
+
+  q.bars.forEach((bar) => {
+    for (let i = 0; i < bar.length - 1; i += 1) {
+      if (bar[i].rhythm === "quaver" && bar[i + 1].rhythm === "quaver") {
+        console.assert(pitchName(bar[i].pitch) !== pitchName(bar[i + 1].pitch), "Consecutive beamed quavers must not repeat.");
+        console.assert(Math.abs(staffStep(bar[i].pitch) - staffStep(bar[i + 1].pitch)) <= 1, "Consecutive beamed quavers must move by step only.");
+      }
+    }
+  });
+}
+
+runTests();
+
+export default function TonicSubdominantDominant() {
+  const timeoutRef = useRef(null);
+  const [question, setQuestion] = useState(() => makeQuestion());
+  const [selectedId, setSelectedId] = useState(null);
+  const [hoveredId, setHoveredId] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [lastCorrect, setLastCorrect] = useState(false);
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+
+  function nextQuestion() {
+    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+    setQuestion(makeQuestion());
+    setSelectedId(null);
+    setHoveredId(null);
+    setFeedback(null);
+    setLastCorrect(false);
+    setShowHelp(false);
+  }
+
+  function confirm() {
+    if (!selectedId || feedback) return;
+    const selectedNote = allNotes(question).find((note) => note.id === selectedId);
+    const isCorrect = Boolean(selectedNote && isTargetNote(question, selectedNote));
+    const newStreak = isCorrect ? streak + 1 : 0;
+
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(newStreak);
+    setBestStreak((value) => Math.max(value, newStreak));
+    setLastCorrect(isCorrect);
+    setFeedback(isCorrect ? "correct" : "incorrect");
+    timeoutRef.current = window.setTimeout(nextQuestion, isCorrect ? 2000 : 4000);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    nextQuestion();
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Tonic, Subdominant and Dominant</h1>
+              <p className="mt-2 text-stone-700">Select tonic, subdominant or dominant notes based on the key signature.</p>
+            </div>
+            <div className="grid min-w-[280px] grid-cols-3 gap-2">
+              <StatCard label="Score" value={`${correct}/${attempted}`} />
+              <StatCard label="Accuracy" value={`${accuracy}%`} />
+              <StatCard label="Streak" value={streak} />
+            </div>
+          </div>
+        </header>
+
+        <main className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="rounded-xl bg-stone-100 px-4 py-3 text-sm text-stone-800">
+              Identify an example of a <strong>{question.questionType.label}</strong> note. The key is <strong>{question.key.label}</strong>.
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" title="Help" aria-label="Help" onClick={() => setShowHelp((value) => !value)} className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>?</button>
+              <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Reset score</button>
+            </div>
+          </div>
+
+          {showHelp && <ScaleHelp question={question} />}
+
+          <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <Score question={question} selectedId={selectedId} hoveredId={hoveredId} feedback={feedback} onSelect={setSelectedId} onHover={setHoveredId} onLeave={() => setHoveredId(null)} />
+          </div>
+
+          <div className="mt-4 flex justify-center">
+            <button type="button" disabled={!selectedId || Boolean(feedback)} onClick={confirm} className={`rounded-xl px-6 py-3 font-semibold ${selectedId && !feedback ? "bg-stone-950 text-white hover:bg-stone-800" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}>Confirm</button>
+          </div>
+
+          <Feedback feedback={feedback} correct={lastCorrect} />
+          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
