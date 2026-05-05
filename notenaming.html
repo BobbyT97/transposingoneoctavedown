@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Note Identification</title>
+<style>
+:root{--stone-50:#fafaf9;--stone-100:#f5f5f4;--stone-200:#e7e5e4;--stone-300:#d6d3d1;--stone-500:#78716c;--stone-600:#57534e;--stone-700:#44403c;--stone-950:#0c0a09;--green:#15803d;--red:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--stone-50);color:var(--stone-950);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+.container{max-width:1100px;margin:0 auto}
+.card{background:#fff;border:1px solid var(--stone-200);border-radius:18px;box-shadow:0 1px 6px rgba(0,0,0,.04)}
+header{padding:24px;margin-bottom:20px}
+.header-row{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap}
+h1{margin:0;font-size:clamp(1.6rem,3vw,2.2rem);line-height:1.1}
+.subtitle{margin:10px 0 0;color:var(--stone-700)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;min-width:280px}
+.stat{background:var(--stone-50);border:1px solid var(--stone-200);border-radius:14px;padding:12px;text-align:center}
+.stat-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--stone-500);margin-bottom:3px}
+.stat-value{font-size:1.35rem;font-weight:700}
+main{padding:22px}
+.top-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.left-buttons,.right-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{appearance:none;border:1px solid var(--stone-300);background:#fff;color:var(--stone-950);border-radius:14px;padding:12px 18px;font-weight:700;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled):not(.active):not(.reset){background:var(--stone-100)}
+button:disabled{opacity:.8;cursor:not-allowed}
+.active{background:var(--stone-950);color:#fff;border-color:var(--stone-950)}
+.reset{background:#dc2626;color:#fff;border-color:#dc2626}
+.reset:hover:not(:disabled){background:#b91c1c}
+.help{width:40px;height:40px;border-radius:999px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:800}
+.customise-wrap{position:relative}
+.customise-panel{display:none;position:absolute;z-index:20;top:calc(100% + 8px);left:0;width:280px;border:1px solid var(--stone-200);background:#fff;border-radius:14px;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.customise-panel.show{display:block}
+.customise-grid{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.option{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:700;color:var(--stone-700);white-space:nowrap;padding:10px;border-radius:12px}
+.option:hover{background:var(--stone-50)}
+.option-label{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:8px}
+.option-label>:first-child{justify-self:center}
+.option input{position:absolute;opacity:0;pointer-events:none}
+.switch{width:44px;height:24px;border-radius:999px;background:var(--stone-300);position:relative;flex:0 0 auto;transition:.18s ease}
+.switch::after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:.18s ease}
+.option input:checked+.switch{background:var(--green)}
+.option input:checked+.switch::after{transform:translateX(20px)}
+.clef-glyph{font-family:serif;font-size:2rem;line-height:1}
+.bass-glyph{font-size:1.8rem}
+.accidental-glyph{font-family:serif;font-size:1.2rem;font-weight:800;line-height:1}
+.ledger-glyph{width:32px;height:32px;display:block}
+.svg-wrap{border:1px solid var(--stone-200);border-radius:14px;overflow:hidden;background:#fff}
+svg{display:block;width:100%;height:auto;user-select:none;touch-action:none}
+.answer-area{margin-top:16px;display:grid;gap:8px}
+.answer-row{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.answer-btn{min-height:46px;display:flex;align-items:center;justify-content:center;font-size:1.05rem}
+.answer-placeholder{min-height:46px;border:1px solid transparent;border-radius:14px}
+.answer-correct{background:var(--green)!important;color:#fff!important;border-color:var(--green)!important}
+.answer-incorrect{background:var(--red)!important;color:#fff!important;border-color:var(--red)!important}
+.feedback-box{min-height:42px;margin-top:16px;border:1px solid transparent;border-radius:14px;padding:10px 16px;color:var(--stone-700);display:flex;align-items:center}
+.feedback-correct{color:var(--green);font-weight:800;font-size:1.15rem}
+.feedback-incorrect{color:var(--red);font-weight:800;font-size:1.15rem}
+.footer-note{margin-top:14px;color:var(--stone-600);font-size:.88rem}
+@media(max-width:760px){body{padding:12px}header,main{padding:16px}.stats{width:100%;min-width:0}.top-row{align-items:stretch}.left-buttons,.right-buttons{justify-content:space-between;width:100%}.answer-row{gap:6px}.answer-btn{padding:10px 6px;font-size:.9rem}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="card">
+    <div class="header-row">
+      <div>
+        <h1>Note Identification</h1>
+        <p class="subtitle">Identify the note given below.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score">0/0</div></div>
+        <div class="stat"><div class="stat-label">Accuracy</div><div class="stat-value" id="accuracy">0%</div></div>
+        <div class="stat"><div class="stat-label">Streak</div><div class="stat-value" id="streak">0</div></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="card">
+    <div class="top-row">
+      <div class="left-buttons customise-wrap">
+        <button id="customiseBtn" type="button">⚙️ Customise</button>
+        <div id="customisePanel" class="customise-panel">
+          <div class="customise-grid">
+            <label class="option">
+              <span class="option-label"><span class="accidental-glyph">♯♭</span><span>Accidentals</span></span>
+              <input id="accidentalsToggle" type="checkbox" />
+              <span class="switch"></span>
+            </label>
+            <label class="option">
+              <span class="option-label"><svg class="ledger-glyph" viewBox="0 0 38 24"><line x1="5" x2="33" y1="12" y2="12" stroke="currentColor" stroke-width="1.6"/><ellipse cx="19" cy="12" rx="7" ry="5" transform="rotate(-18 19 12)" fill="currentColor"/></svg><span>Ledger lines</span></span>
+              <input id="ledgerToggle" type="checkbox" checked />
+              <span class="switch"></span>
+            </label>
+            <label class="option">
+              <span class="option-label"><span class="clef-glyph">𝄞</span><span>Treble clef</span></span>
+              <input id="trebleToggle" type="checkbox" checked />
+              <span class="switch"></span>
+            </label>
+            <label class="option">
+              <span class="option-label"><span class="clef-glyph bass-glyph">𝄢</span><span>Bass clef</span></span>
+              <input id="bassToggle" type="checkbox" checked />
+              <span class="switch"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="right-buttons">
+        <button id="helpBtn" class="help" type="button">?</button>
+        <button id="resetBtn" class="reset" type="button">Reset score</button>
+      </div>
+    </div>
+
+    <div class="svg-wrap">
+      <svg id="musicSvg" viewBox="0 0 720 390">
+        <rect x="0" y="0" width="720" height="390" fill="white"></rect>
+        <g id="trebleStaff"></g>
+        <g id="bassStaff"></g>
+        <text id="trebleClef" x="116" y="117" font-size="130" font-family="serif" dominant-baseline="middle"></text>
+        <text id="bassClef" x="112" y="258" font-size="79.4" font-family="serif" dominant-baseline="middle"></text>
+        <g id="helpLayer"></g>
+        <g id="noteLayer"></g>
+      </svg>
+    </div>
+
+    <div class="answer-area">
+      <div id="sharpRow" class="answer-row"></div>
+      <div id="naturalRow" class="answer-row"></div>
+      <div id="flatRow" class="answer-row"></div>
+    </div>
+
+    <div id="feedbackBox" class="feedback-box"></div>
+    <div class="footer-note" id="footerNote">Best streak: 0</div>
+  </main>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var STAFF_LEFT=96, STAFF_RIGHT=620, LINE_GAP=14, TREBLE_TOP=78, BASS_TOP=226;
+var NOTE_X=350, NOTE_RX=8.82, NOTE_RY=6.17, STEM_LENGTH=48;
+var GREEN='#15803d', RED='#b91c1c';
+var TREBLE_CLEF=String.fromCodePoint(0x1d11e);
+var BASS_CLEF=String.fromCodePoint(0x1d122);
+var TICK=String.fromCodePoint(0x2714);
+var LETTERS=['A','B','C','D','E','F','G'];
+var SHARPS={A:'A#',B:null,C:'C#',D:'D#',E:null,F:'F#',G:'G#'};
+var FLATS={A:'Ab',B:'Bb',C:null,D:'Db',E:'Eb',F:null,G:'Gb'};
+var LEDGER_BLOCKED={'E2':true,'F2':true,'B3':true,'C4':true,'D4':true,'G5':true,'A5':true};
+var NOTE_DATA=[
+  {pitch:'E2',answer:'E',clef:'bass',step:-2},{pitch:'F2',answer:'F',clef:'bass',step:-1},{pitch:'G2',answer:'G',clef:'bass',step:0},
+  {pitch:'A2',answer:'A',clef:'bass',step:1},{pitch:'B2',answer:'B',clef:'bass',step:2},{pitch:'C3',answer:'C',clef:'bass',step:3},
+  {pitch:'D3',answer:'D',clef:'bass',step:4},{pitch:'E3',answer:'E',clef:'bass',step:5},{pitch:'F3',answer:'F',clef:'bass',step:6},
+  {pitch:'G3',answer:'G',clef:'bass',step:7},{pitch:'A3',answer:'A',clef:'bass',step:8},{pitch:'B3',answer:'B',clef:'bass',step:9},
+  {pitch:'C4',answer:'C',clef:'bass',step:10},{pitch:'C4',answer:'C',clef:'treble',step:-2},{pitch:'D4',answer:'D',clef:'treble',step:-1},
+  {pitch:'E4',answer:'E',clef:'treble',step:0},{pitch:'F4',answer:'F',clef:'treble',step:1},{pitch:'G4',answer:'G',clef:'treble',step:2},
+  {pitch:'A4',answer:'A',clef:'treble',step:3},{pitch:'B4',answer:'B',clef:'treble',step:4},{pitch:'C5',answer:'C',clef:'treble',step:5},
+  {pitch:'D5',answer:'D',clef:'treble',step:6},{pitch:'E5',answer:'E',clef:'treble',step:7},{pitch:'F5',answer:'F',clef:'treble',step:8},
+  {pitch:'G5',answer:'G',clef:'treble',step:9},{pitch:'A5',answer:'A',clef:'treble',step:10}
+];
+
+var trebleStaff=document.getElementById('trebleStaff');
+var bassStaff=document.getElementById('bassStaff');
+var noteLayer=document.getElementById('noteLayer');
+var helpLayer=document.getElementById('helpLayer');
+var trebleClef=document.getElementById('trebleClef');
+var bassClef=document.getElementById('bassClef');
+var sharpRow=document.getElementById('sharpRow');
+var naturalRow=document.getElementById('naturalRow');
+var flatRow=document.getElementById('flatRow');
+var feedbackBox=document.getElementById('feedbackBox');
+var scoreEl=document.getElementById('score');
+var accuracyEl=document.getElementById('accuracy');
+var streakEl=document.getElementById('streak');
+var footerNote=document.getElementById('footerNote');
+var customiseBtn=document.getElementById('customiseBtn');
+var customisePanel=document.getElementById('customisePanel');
+var helpBtn=document.getElementById('helpBtn');
+var resetBtn=document.getElementById('resetBtn');
+var accidentalsToggle=document.getElementById('accidentalsToggle');
+var ledgerToggle=document.getElementById('ledgerToggle');
+var trebleToggle=document.getElementById('trebleToggle');
+var bassToggle=document.getElementById('bassToggle');
+
+var currentQuestion=null;
+var selectedAnswer=null;
+var feedback=null;
+var showHelp=false;
+var showCustomise=false;
+var correct=0;
+var attempted=0;
+var streak=0;
+var bestStreak=0;
+var timer=null;
+
+trebleClef.textContent=TREBLE_CLEF;
+bassClef.textContent=BASS_CLEF;
+
+function svgEl(name,attrs){
+  var el=document.createElementNS('http://www.w3.org/2000/svg',name);
+  attrs=attrs||{};
+  Object.keys(attrs).forEach(function(key){el.setAttribute(key,attrs[key]);});
+  return el;
+}
+
+function yForStep(top,step){return top+LINE_GAP*4-step*(LINE_GAP/2);}
+function stemGoesDown(step){return step>4;}
+
+function drawStaff(group,top){
+  var i;
+  group.innerHTML='';
+  for(i=0;i<5;i++){
+    group.appendChild(svgEl('line',{x1:STAFF_LEFT,x2:STAFF_RIGHT,y1:top+i*LINE_GAP,y2:top+i*LINE_GAP,stroke:'currentColor','stroke-width':'1.5'}));
+  }
+  group.appendChild(svgEl('line',{x1:STAFF_RIGHT,x2:STAFF_RIGHT,y1:top,y2:top+LINE_GAP*4,stroke:'currentColor','stroke-width':'1.5'}));
+}
+
+function ledgerLines(parent,x,top,step,clef){
+  var lines=[];
+  if(!ledgerToggle.checked)return;
+  if(clef==='treble'&&step<=-2)lines.push(yForStep(top,-2));
+  if(clef==='treble'&&step>=10)lines.push(yForStep(top,10));
+  if(clef==='bass'&&step<=-2)lines.push(yForStep(top,-2));
+  if(clef==='bass'&&step>=10)lines.push(yForStep(top,10));
+  lines.forEach(function(y){parent.appendChild(svgEl('line',{x1:x-19,x2:x+19,y1:y,y2:y,stroke:'currentColor','stroke-width':'1.5'}));});
+}
+
+function drawSharp(parent,x,y,colour){
+  var text=svgEl('text',{x:x+1,y:y-1,'font-size':'31.35','font-family':'serif','font-weight':'900',fill:colour,stroke:colour,'stroke-width':'0.6'});
+  text.textContent='♯';
+  parent.appendChild(text);
+}
+
+function drawAccidental(parent,note,y,colour){
+  var flat;
+  if(!note.accidental)return;
+  if(note.accidental==='♯'){
+    drawSharp(parent,NOTE_X-30,y+12,colour);
+    return;
+  }
+  flat=svgEl('text',{x:NOTE_X-38,y:y+7,'font-size':'31.35','font-family':'serif','font-weight':'900',fill:colour,stroke:colour,'stroke-width':'0.6'});
+  flat.textContent='♭';
+  parent.appendChild(flat);
+}
+
+function drawCrotchet(parent,note,colour){
+  var top=note.clef==='treble'?TREBLE_TOP:BASS_TOP;
+  var y=yForStep(top,note.step);
+  var down=stemGoesDown(note.step);
+  var stemX=down?NOTE_X-NOTE_RX:NOTE_X+NOTE_RX;
+  var stemEndY=down?y+STEM_LENGTH:y-STEM_LENGTH;
+  colour=colour||'currentColor';
+  ledgerLines(parent,NOTE_X,top,note.step,note.clef);
+  drawAccidental(parent,note,y,colour);
+  parent.appendChild(svgEl('ellipse',{cx:NOTE_X,cy:y,rx:NOTE_RX,ry:NOTE_RY,transform:'rotate(-18 '+NOTE_X+' '+y+')',fill:colour,stroke:colour,'stroke-width':'2.2'}));
+  parent.appendChild(svgEl('line',{x1:stemX,x2:stemX,y1:y,y2:stemEndY,stroke:colour,'stroke-width':'2'}));
+}
+
+function addHelpText(root,items,top,x){
+  items.forEach(function(item){
+    var text=svgEl('text',{x:x,y:yForStep(top,item.step)+5,fill:'#1d4ed8','text-anchor':'middle'});
+    text.textContent=item.letter;
+    root.appendChild(text);
+  });
+}
+
+function drawHelpLabels(){
+  var lineX=STAFF_LEFT-5;
+  var spaceX=STAFF_LEFT+9;
+  var root=svgEl('g',{'font-size':'14','font-family':'system-ui, sans-serif','font-weight':'700','dominant-baseline':'middle'});
+  var trebleLines=[{step:0,letter:'E'},{step:2,letter:'G'},{step:4,letter:'B'},{step:6,letter:'D'},{step:8,letter:'F'}];
+  var trebleSpaces=[{step:1,letter:'F'},{step:3,letter:'A'},{step:5,letter:'C'},{step:7,letter:'E'}];
+  var bassLines=[{step:0,letter:'G'},{step:2,letter:'B'},{step:4,letter:'D'},{step:6,letter:'F'},{step:8,letter:'A'}];
+  var bassSpaces=[{step:1,letter:'A'},{step:3,letter:'C'},{step:5,letter:'E'},{step:7,letter:'G'}];
+  helpLayer.innerHTML='';
+  if(!showHelp)return;
+  if(trebleToggle.checked){addHelpText(root,trebleLines,TREBLE_TOP,lineX);addHelpText(root,trebleSpaces,TREBLE_TOP,spaceX);}
+  if(bassToggle.checked){addHelpText(root,bassLines,BASS_TOP,lineX);addHelpText(root,bassSpaces,BASS_TOP,spaceX);}
+  helpLayer.appendChild(root);
+}
+
+function possibleQuestions(){
+  return NOTE_DATA.filter(function(note){
+    var clefEnabled=(trebleToggle.checked&&note.clef==='treble')||(bassToggle.checked&&note.clef==='bass');
+    if(!clefEnabled)return false;
+    if(ledgerToggle.checked)return true;
+    return !LEDGER_BLOCKED[note.pitch];
+  });
+}
+
+function accidentalForLetter(letter){
+  var options;
+  if(!accidentalsToggle.checked)return{answer:letter,accidental:null};
+  options=[{answer:letter,accidental:null}];
+  if(SHARPS[letter])options.push({answer:SHARPS[letter],accidental:'♯'});
+  if(FLATS[letter])options.push({answer:FLATS[letter],accidental:'♭'});
+  return options[Math.floor(Math.random()*options.length)];
+}
+
+function cloneQuestion(base,accidental){
+  return {pitch:base.pitch,answer:accidental.answer,clef:base.clef,step:base.step,accidental:accidental.accidental};
+}
+
+function makeQuestion(previousPitch){
+  var pool=possibleQuestions();
+  var chosen;
+  var guard=0;
+  var accidental;
+  if(pool.length===0)throw new Error('No available questions. At least one clef must be enabled.');
+  chosen=pool[Math.floor(Math.random()*pool.length)];
+  while(pool.length>1&&previousPitch&&chosen.pitch===previousPitch&&guard<20){
+    chosen=pool[Math.floor(Math.random()*pool.length)];
+    guard++;
+  }
+  accidental=accidentalForLetter(chosen.answer);
+  return cloneQuestion(chosen,accidental);
+}
+
+function answerClass(value){
+  var className='answer-btn';
+  if(feedback){
+    if(value===currentQuestion.answer)className+=' answer-correct';
+    if(value===selectedAnswer&&value!==currentQuestion.answer)className+=' answer-incorrect';
+  }
+  return className;
+}
+
+function makeAnswerButton(value){
+  var button=document.createElement('button');
+  button.type='button';
+  button.className=answerClass(value);
+  button.textContent=value;
+  button.onclick=function(){chooseAnswer(value);};
+  return button;
+}
+
+function makePlaceholder(){
+  var div=document.createElement('div');
+  div.className='answer-placeholder';
+  return div;
+}
+
+function buildAnswerButtons(){
+  sharpRow.innerHTML='';
+  naturalRow.innerHTML='';
+  flatRow.innerHTML='';
+  LETTERS.forEach(function(letter){sharpRow.appendChild(SHARPS[letter]?makeAnswerButton(SHARPS[letter]):makePlaceholder());});
+  LETTERS.forEach(function(letter){naturalRow.appendChild(makeAnswerButton(letter));});
+  LETTERS.forEach(function(letter){flatRow.appendChild(FLATS[letter]?makeAnswerButton(FLATS[letter]):makePlaceholder());});
+  sharpRow.style.display=accidentalsToggle.checked?'grid':'none';
+  flatRow.style.display=accidentalsToggle.checked?'grid':'none';
+}
+
+function setAnswerButtonsDisabled(disabled){
+  var buttons=[].slice.call(sharpRow.querySelectorAll('button')).concat([].slice.call(naturalRow.querySelectorAll('button')),[].slice.call(flatRow.querySelectorAll('button')));
+  buttons.forEach(function(button){button.disabled=disabled;});
+}
+
+function renderStats(){
+  var accuracy=attempted?Math.round(correct/attempted*100):0;
+  scoreEl.textContent=correct+'/'+attempted;
+  accuracyEl.textContent=accuracy+'%';
+  streakEl.textContent=String(streak);
+  footerNote.textContent='Best streak: '+bestStreak;
+}
+
+function renderFeedback(){
+  feedbackBox.className='feedback-box';
+  feedbackBox.style.color='';
+  feedbackBox.style.fontWeight='';
+  feedbackBox.textContent='';
+
+  if(feedback==='correct'){
+    feedbackBox.className='feedback-box feedback-correct';
+    feedbackBox.textContent=TICK+' Correct';
+    return;
+  }
+
+  if(feedback==='incorrect'){
+    feedbackBox.className='feedback-box feedback-incorrect';
+    feedbackBox.textContent='✖ Incorrect';
+  }
+}
+
+function renderNote(){
+  var colour;
+  noteLayer.innerHTML='';
+  if(!currentQuestion)return;
+  colour=feedback==='correct'?GREEN:(feedback==='incorrect'?RED:'currentColor');
+  drawCrotchet(noteLayer,currentQuestion,colour);
+}
+
+function render(){
+  trebleStaff.style.display=trebleToggle.checked?'block':'none';
+  bassStaff.style.display=bassToggle.checked?'block':'none';
+  trebleClef.style.display=trebleToggle.checked?'block':'none';
+  bassClef.style.display=bassToggle.checked?'block':'none';
+  customisePanel.classList.toggle('show',showCustomise);
+  customiseBtn.classList.toggle('active',showCustomise);
+  helpBtn.classList.toggle('active',showHelp);
+  buildAnswerButtons();
+  setAnswerButtonsDisabled(Boolean(feedback));
+  drawHelpLabels();
+  renderStats();
+  renderNote();
+  renderFeedback();
+}
+
+function newQuestion(){
+  var previousPitch=currentQuestion?currentQuestion.pitch:null;
+  clearTimeout(timer);
+  currentQuestion=makeQuestion(previousPitch);
+  selectedAnswer=null;
+  feedback=null;
+  render();
+}
+
+function chooseAnswer(answer){
+  var isCorrect;
+  if(feedback)return;
+  selectedAnswer=answer;
+  isCorrect=answer===currentQuestion.answer;
+  attempted++;
+  if(isCorrect)correct++;
+  streak=isCorrect?streak+1:0;
+  bestStreak=Math.max(bestStreak,streak);
+  feedback=isCorrect?'correct':'incorrect';
+  showHelp=showHelp;
+  render();
+  timer=setTimeout(newQuestion,isCorrect?2000:4000);
+}
+
+function resetScore(){
+  correct=0;
+  attempted=0;
+  streak=0;
+  bestStreak=0;
+  newQuestion();
+}
+
+function enforceAtLeastOneClef(changed){
+  if(trebleToggle.checked||bassToggle.checked)return;
+  if(changed==='treble')bassToggle.checked=true;
+  else trebleToggle.checked=true;
+}
+
+function runTests(){
+  var oldFeedback=feedback;
+  var oldQuestion=currentQuestion;
+  console.assert(yForStep(TREBLE_TOP,0)===134,'Treble E4 should sit on bottom line');
+  console.assert(yForStep(BASS_TOP,0)===282,'Bass G2 should sit on bottom line');
+  console.assert(stemGoesDown(5)===true,'Notes above middle line should stem down');
+  console.assert(stemGoesDown(4)===false,'Middle line and below should stem up');
+  console.assert(LETTERS.length===7,'There should be seven natural answer buttons');
+  console.assert(possibleQuestions().length>0,'There should be available questions on launch');
+  console.assert(accidentalForLetter('B').answer!=='B#','B sharp should not be generated');
+  console.assert(accidentalForLetter('E').answer!=='E#','E sharp should not be generated');
+  currentQuestion={answer:'C'};
+  selectedAnswer='D';
+  feedback='incorrect';
+  renderFeedback();
+  console.assert(feedbackBox.textContent.indexOf('Incorrect')!==-1,'Incorrect feedback should show text');
+  feedback='correct';
+  renderFeedback();
+  console.assert(feedbackBox.textContent.indexOf('Correct')!==-1,'Correct feedback should still show text');
+  feedback=oldFeedback;
+  currentQuestion=oldQuestion;
+}
+
+customiseBtn.onclick=function(e){e.stopPropagation();showCustomise=!showCustomise;render();};
+
+document.addEventListener('click',function(e){
+  if(!customisePanel.contains(e.target) && e.target!==customiseBtn){
+    if(showCustomise){
+      showCustomise=false;
+      render();
+    }
+  }
+});
+helpBtn.onclick=function(){showHelp=!showHelp;render();};
+resetBtn.onclick=resetScore;
+accidentalsToggle.onchange=function(){newQuestion();};
+ledgerToggle.onchange=function(){newQuestion();};
+trebleToggle.onchange=function(){enforceAtLeastOneClef('treble');newQuestion();};
+bassToggle.onchange=function(){enforceAtLeastOneClef('bass');newQuestion();};
+
+drawStaff(trebleStaff,TREBLE_TOP);
+drawStaff(bassStaff,BASS_TOP);
+runTests();
+newQuestion();
+
+}());
+</script>
+</body>
+</html>
