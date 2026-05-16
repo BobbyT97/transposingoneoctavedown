@@ -3,45 +3,59 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Intervals</title>
+  <title>Intervals Golden App</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div id="root"></div>
-<script type="text/babel">
-const { useMemo, useRef, useState } = React;
+  <div id="root"></div>
 
-const VIEWBOX_WIDTH = 720;
-const VIEWBOX_HEIGHT = 300;
-const STAFF_LEFT = 110;
-const STAFF_RIGHT = 610;
-const TREBLE_TOP = 118;
-const LINE_GAP = 16;
-const NOTE_RX = 11;
-const NOTE_RY = 7.8;
-const STEM_LENGTH = 50;
+  <script type="text/babel">
+const { useEffect, useMemo, useRef, useState } = React;
 
-const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
+const SVG = { width: 920, height: 420 };
+
+const STAFF = {
+  left: 222,
+  right: 684,
+  trebleTop: 132,
+  gap: 21,
+};
+
+const NOTE = {
+  rx: 13.55,
+  ry: 9.69,
+  stemLength: 69,
+};
+
+const COLOUR = {
+  green: "#16a34a",
+  red: "#dc2626",
+  preview: "#444444",
+  black: "#000000",
+};
+
+const GLYPH = {
+  trebleClef: String.fromCodePoint(0x1d11e),
+  bassClef: String.fromCodePoint(0x1d122),
+};
 
 const NOTES = [
-  { name: "C4", step: -2 },
-  { name: "D4", step: -1 },
-  { name: "E4", step: 0 },
-  { name: "F4", step: 1 },
-  { name: "G4", step: 2 },
-  { name: "A4", step: 3 },
-  { name: "B4", step: 4 },
-  { name: "C5", step: 5 },
-  { name: "D5", step: 6 },
-  { name: "E5", step: 7 },
-  { name: "F5", step: 8 },
-  { name: "G5", step: 9 },
-  { name: "A5", step: 10 },
+  { name: "C4", letter: "C", octave: 4, step: -2 },
+  { name: "D4", letter: "D", octave: 4, step: -1 },
+  { name: "E4", letter: "E", octave: 4, step: 0 },
+  { name: "F4", letter: "F", octave: 4, step: 1 },
+  { name: "G4", letter: "G", octave: 4, step: 2 },
+  { name: "A4", letter: "A", octave: 4, step: 3 },
+  { name: "B4", letter: "B", octave: 4, step: 4 },
+  { name: "C5", letter: "C", octave: 5, step: 5 },
+  { name: "D5", letter: "D", octave: 5, step: 6 },
+  { name: "E5", letter: "E", octave: 5, step: 7 },
+  { name: "F5", letter: "F", octave: 5, step: 8 },
+  { name: "G5", letter: "G", octave: 5, step: 9 },
+  { name: "A5", letter: "A", octave: 5, step: 10 },
 ];
 
 const INTERVALS = [
@@ -54,6 +68,25 @@ const INTERVALS = [
   { size: 8, label: "Octave" },
 ];
 
+const NOTE_NAME_LABELS = {
+  treble: {
+    top: STAFF.trebleTop,
+    lines: [
+      { step: 0, letter: "E" },
+      { step: 2, letter: "G" },
+      { step: 4, letter: "B" },
+      { step: 6, letter: "D" },
+      { step: 8, letter: "F" },
+    ],
+    spaces: [
+      { step: 1, letter: "F" },
+      { step: 3, letter: "A" },
+      { step: 5, letter: "C" },
+      { step: 7, letter: "E" },
+    ],
+  },
+};
+
 function randomIndex(length) {
   return Math.floor(Math.random() * length);
 }
@@ -62,41 +95,51 @@ function randomItem(items) {
   return items[randomIndex(items.length)];
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function noteByIndex(index) {
-  return NOTES[Math.max(0, Math.min(NOTES.length - 1, index))];
+  return NOTES[clamp(index, 0, NOTES.length - 1)];
 }
 
 function intervalLabel(size) {
   return INTERVALS.find((interval) => interval.size === size)?.label ?? `${size}th`;
 }
 
-function yForStep(step) {
-  const bottomLineY = TREBLE_TOP + LINE_GAP * 4;
-  return bottomLineY - step * (LINE_GAP / 2);
+function yForStep(top, step) {
+  return top + STAFF.gap * 4 - step * (STAFF.gap / 2);
 }
 
-function stemGoesDown(step) {
+function stepFromSvgY(y, top) {
+  return clamp(Math.round((top + STAFF.gap * 4 - y) / (STAFF.gap / 2)), NOTES[0].step, NOTES.at(-1).step);
+}
+
+function indexFromStep(step) {
+  return NOTES.findIndex((note) => note.step === step);
+}
+
+function stemDown(step) {
   return step > 4;
 }
 
-function getStepFromMouseY(clientY, rect) {
-  const svgY = ((clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT;
-  const bottomLineY = TREBLE_TOP + LINE_GAP * 4;
-  const rawStep = Math.round((bottomLineY - svgY) / (LINE_GAP / 2));
-  return Math.max(NOTES[0].step, Math.min(NOTES[NOTES.length - 1].step, rawStep));
+function getStem(x, y, step, forcedDown = null) {
+  const down = forcedDown ?? stemDown(step);
+  const stemX = down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5;
+  const stemEndY = down ? y + NOTE.stemLength : y - NOTE.stemLength;
+  return { down, stemX, stemEndY };
 }
 
 function makeIdentifyQuestion() {
   const interval = randomItem(INTERVALS);
   const distance = interval.size - 1;
   const direction = Math.random() < 0.5 ? "higher" : "lower";
-  const possibleStarts = NOTES.map((_, index) => index).filter((index) => {
-    return direction === "higher" ? index + distance < NOTES.length : index - distance >= 0;
-  });
+  const possibleStarts = NOTES.map((_, index) => index).filter((index) => direction === "higher" ? index + distance < NOTES.length : index - distance >= 0);
   const startIndex = randomItem(possibleStarts);
   const endIndex = direction === "higher" ? startIndex + distance : startIndex - distance;
 
   return {
+    id: Math.random().toString(36).slice(2),
     type: "identify",
     startIndex,
     endIndex,
@@ -110,319 +153,594 @@ function makeCreateQuestion() {
 
   INTERVALS.forEach((interval) => {
     const distance = interval.size - 1;
-
     NOTES.forEach((_, startIndex) => {
       if (startIndex + distance < NOTES.length) {
-        validQuestions.push({
-          type: "create",
-          startIndex,
-          targetIndex: startIndex + distance,
-          intervalSize: interval.size,
-          direction: "higher",
-        });
+        validQuestions.push({ type: "create", startIndex, targetIndex: startIndex + distance, intervalSize: interval.size, direction: "higher" });
       }
-
       if (startIndex - distance >= 0) {
-        validQuestions.push({
-          type: "create",
-          startIndex,
-          targetIndex: startIndex - distance,
-          intervalSize: interval.size,
-          direction: "lower",
-        });
+        validQuestions.push({ type: "create", startIndex, targetIndex: startIndex - distance, intervalSize: interval.size, direction: "lower" });
       }
     });
   });
 
-  return randomItem(validQuestions);
+  return { id: Math.random().toString(36).slice(2), ...randomItem(validQuestions) };
 }
 
-function makeQuestion(mode) {
+function createQuestion(mode = "identify") {
   return mode === "create" ? makeCreateQuestion() : makeIdentifyQuestion();
 }
 
-function StaffLines() {
-  return (
-    <g>
-      {[0, 1, 2, 3, 4].map((index) => (
-        <line
-          key={index}
-          x1={STAFF_LEFT}
-          x2={STAFF_RIGHT}
-          y1={TREBLE_TOP + index * LINE_GAP}
-          y2={TREBLE_TOP + index * LINE_GAP}
-          stroke="currentColor"
-          strokeWidth="1.4"
-        />
-      ))}
-    </g>
-  );
+function pickQuestionMode(enabledModes) {
+  const availableModes = [];
+  if (enabledModes.identify) availableModes.push("identify");
+  if (enabledModes.create) availableModes.push("create");
+  return randomItem(availableModes.length ? availableModes : ["identify", "create"]);
+}
+
+function playFeedbackSound(correct, celebration = false, medal = null) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  const context = new AudioContextClass();
+  const master = context.createGain();
+  const now = context.currentTime + 0.01;
+  context.resume?.();
+  master.gain.value = 0.18;
+  master.connect(context.destination);
+
+  function tone(freq, start, duration, type = "triangle", volume = 0.12) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  function trumpet(freq, start, duration, volume = 0.1) {
+    tone(freq, start, duration, "sawtooth", volume);
+    tone(freq * 1.002, start, duration * 0.96, "square", volume * 0.32);
+    tone(freq * 2, start, duration * 0.75, "triangle", volume * 0.16);
+  }
+
+  function medalPhrase(root, chord, start, beats = 4) {
+    const beat = 0.6;
+    const triplet = 0.13;
+    const finalDuration = beats === 2 ? 0.72 : 1.95;
+    chord.forEach((freq) => trumpet(freq, start, beats * beat, 0.045));
+    trumpet(root, start, triplet, 0.11);
+    trumpet(root, start + triplet, triplet, 0.11);
+    trumpet(root, start + triplet * 2, triplet, 0.11);
+    trumpet(root, start + 0.42, finalDuration, 0.13);
+  }
+
+  if (!correct) {
+    tone(196, now, 0.32, "sawtooth", 0.06);
+    tone(185, now + 0.04, 0.38, "triangle", 0.05);
+    tone(174, now + 0.08, 0.45, "sine", 0.04);
+  } else if (celebration) {
+    if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
+    if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
+    if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
+    if (medal === "platinum") {
+      medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
+      medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
+      medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+    }
+  } else {
+    randomItem([[523.25, 659.25, 783.99], [587.33, 739.99, 880], [659.25, 830.61, 987.77]]).forEach((freq, index) => {
+      tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
+      tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
+    });
+  }
+
+  window.setTimeout(() => {
+    try { context.close(); } catch {}
+  }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
 }
 
 function LedgerLines({ x, step, colour = "currentColor" }) {
   const lines = [];
-  if (step <= -2) lines.push(yForStep(-2));
-  if (step >= 10) lines.push(yForStep(10));
+  if (step <= -2) lines.push(yForStep(STAFF.trebleTop, -2));
+  if (step >= 10) lines.push(yForStep(STAFF.trebleTop, 10));
 
   return (
-    <g>
-      {lines.map((lineY) => (
-        <line key={lineY} x1={x - 18} x2={x + 18} y1={lineY} y2={lineY} stroke={colour} strokeWidth="1.4" />
+    <g pointerEvents="none">
+      {lines.map((y) => (
+        <line key={y} x1={x - 27} x2={x + 27} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
       ))}
     </g>
   );
 }
 
-function Notehead({ x, note, ghost = false, colour = "currentColor" }) {
-  const y = yForStep(note.step);
-  const stemDown = stemGoesDown(note.step);
-  const stemX = stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1;
-  const stemEndY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH;
+function RhythmNote({ x, y, step, colour = "currentColor", opacity = 1, preview = false, scale = 1 }) {
+  const stem = getStem(x, y, step);
 
   return (
-    <g opacity={ghost ? 0.55 : 1}>
-      <LedgerLines x={x} step={note.step} colour={colour} />
+    <g opacity={opacity} pointerEvents="none" transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
       <ellipse
         cx={x}
         cy={y}
-        rx={NOTE_RX}
-        ry={NOTE_RY}
+        rx={NOTE.rx}
+        ry={NOTE.ry}
         transform={`rotate(-18 ${x} ${y})`}
         fill={colour}
         stroke={colour}
-        strokeWidth="1.8"
+        strokeWidth={preview ? 2 : 2.2}
       />
-      <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.8" />
+      <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />
     </g>
   );
 }
 
-function TrebleClef() {
+function Staff() {
   return (
-    <text x={STAFF_LEFT + 16} y={TREBLE_TOP + 44} fontSize="139" fontFamily="serif" dominantBaseline="middle">
-      {TREBLE_CLEF}
-    </text>
+    <g>
+      {[0, 1, 2, 3, 4].map((line) => (
+        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
+      ))}
+      <line x1={STAFF.right} x2={STAFF.right} y1={STAFF.trebleTop} y2={STAFF.trebleTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
+      <text x={STAFF.left + 18} y={STAFF.trebleTop + 58} fontSize="189" fontFamily="serif" dominantBaseline="middle">{GLYPH.trebleClef}</text>
+    </g>
+  );
+}
+
+function HelpLabels({ visible }) {
+  if (!visible) return null;
+  const lineLabelX = STAFF.left - 11;
+  const spaceLabelX = STAFF.left + 16;
+  const data = NOTE_NAME_LABELS.treble;
+
+  return (
+    <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black">
+      {data.lines.map((note) => (
+        <text key={`line-${note.step}`} x={lineLabelX} y={yForStep(data.top, note.step) + 5} textAnchor="start">{note.letter}</text>
+      ))}
+      {data.spaces.map((note) => (
+        <text key={`space-${note.step}`} x={spaceLabelX} y={yForStep(data.top, note.step) + 5} textAnchor="end">{note.letter}</text>
+      ))}
+    </g>
   );
 }
 
 function IntervalHelpNumbers({ question, startX, secondX }) {
-  const noteCount = Math.abs(question.endIndex - question.startIndex) + 1;
-  const direction = question.endIndex >= question.startIndex ? 1 : -1;
-  const totalDistance = Math.max(1, Math.abs(question.endIndex - question.startIndex));
+  const endIndex = question.type === "identify" ? question.endIndex : question.targetIndex;
+  const noteCount = Math.abs(endIndex - question.startIndex) + 1;
+  const direction = endIndex >= question.startIndex ? 1 : -1;
+  const totalDistance = Math.max(1, Math.abs(endIndex - question.startIndex));
 
   return (
-    <g fontSize="20" fontWeight="800" fill="red" opacity="0.5">
+    <g fontSize="22" fontWeight="600" fill="#16a34a" opacity="0.6" pointerEvents="none">
       {Array.from({ length: noteCount }, (_, countIndex) => {
         const noteIndex = question.startIndex + countIndex * direction;
         const note = noteByIndex(noteIndex);
         const x = startX + ((secondX - startX) * countIndex) / totalDistance;
-
-        return (
-          <text key={`${note.name}-${countIndex}`} x={x + 22} y={yForStep(note.step) + 7} textAnchor="middle">
-            {countIndex + 1}
-          </text>
-        );
+        return <text key={`${note.name}-${countIndex}`} x={x + 26} y={yForStep(STAFF.trebleTop, note.step) + 7} textAnchor="middle">{countIndex + 1}</text>;
       })}
     </g>
   );
 }
 
-function IntervalNotation({ question, mode, hoverIndex, selectedIndex, onHoverIndex, onSelectIndex, feedback, showHelp }) {
+function Note({ x, note, colour = "currentColor", opacity = 1, preview = false, scale = 1 }) {
+  const y = yForStep(STAFF.trebleTop, note.step);
+  return (
+    <g>
+      <LedgerLines x={x} step={note.step} colour={colour} />
+      <RhythmNote x={x} y={y} step={note.step} colour={colour} opacity={opacity} preview={preview} scale={scale} />
+    </g>
+  );
+}
+
+function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedback, selectedAnswer, touchPreview, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
+  const startX = mode === "identify" ? 392 : 382;
+  const secondX = mode === "identify" ? 536 : 536;
   const startNote = noteByIndex(question.startIndex);
-  const identifyEndNote = question.type === "identify" ? noteByIndex(question.endIndex) : null;
+  const targetIndex = mode === "identify" ? question.endIndex : question.targetIndex;
+  const targetNote = noteByIndex(targetIndex);
   const workingIndex = selectedIndex ?? hoverIndex;
-  const workingNote = mode === "create" && workingIndex !== null ? noteByIndex(workingIndex) : null;
-  const correctCreateNote = mode === "create" ? noteByIndex(question.targetIndex) : null;
-  const showCreateCorrection = mode === "create" && feedback === "incorrect" && selectedIndex !== null;
-  const createHelpNumber = mode === "create" && showHelp && workingIndex !== null ? Math.abs(workingIndex - question.startIndex) + 1 : null;
-
-  const startX = mode === "identify" ? 285 : 315;
-  const secondX = mode === "identify" ? 435 : 445;
-
-  function handleMouseMove(event) {
-    if (mode !== "create" || feedback) return;
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    const step = getStepFromMouseY(event.clientY, rect);
-    const index = NOTES.findIndex((note) => note.step === step);
-
-    if (index !== -1) onHoverIndex(index);
-  }
-
-  function handleClick() {
-    if (mode !== "create" || hoverIndex === null || feedback) return;
-    onSelectIndex(hoverIndex);
-  }
+  const workingNote = mode === "create" && workingIndex != null ? noteByIndex(workingIndex) : null;
+  const selectedNote = mode === "create" && selectedIndex != null ? noteByIndex(selectedIndex) : null;
+  const identifyCorrect = feedback && mode === "identify" && selectedAnswer === question.intervalSize;
+  const identifyIncorrect = feedback && mode === "identify" && selectedAnswer !== question.intervalSize;
+  const createCorrect = feedback && mode === "create" && selectedIndex === question.targetIndex;
+  const createIncorrect = feedback && mode === "create" && selectedIndex !== question.targetIndex;
 
   return (
-    <svg
-      viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-      className="w-full h-auto select-none"
-      aria-label="Interval exercise"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => mode === "create" && !feedback && onHoverIndex(null)}
-      onClick={handleClick}
-    >
-      <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-      <StaffLines />
-      <TrebleClef />
-      <Notehead x={startX} note={startNote} />
+    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
+      <rect width={SVG.width} height={SVG.height} fill="white" />
+      <Staff />
 
-      {mode === "identify" && identifyEndNote && <Notehead x={secondX} note={identifyEndNote} />}
-      {mode === "identify" && showHelp && <IntervalHelpNumbers question={question} startX={startX} secondX={secondX} />}
+      <Note x={startX} note={startNote} />
 
-      {mode === "create" && workingNote && !showCreateCorrection && <Notehead x={secondX} note={workingNote} ghost={selectedIndex === null} />}
-      {showCreateCorrection && <Notehead x={secondX - 26} note={noteByIndex(selectedIndex)} colour="#b91c1c" />}
-      {showCreateCorrection && correctCreateNote && <Notehead x={secondX + 26} note={correctCreateNote} colour="#15803d" />}
+      {mode === "identify" && (
+        <>
+          <Note x={secondX} note={targetNote} colour={identifyCorrect ? COLOUR.green : identifyIncorrect ? COLOUR.red : "currentColor"} />
+          {showHelp && <IntervalHelpNumbers question={question} startX={startX} secondX={secondX} />}
+        </>
+      )}
 
-      {createHelpNumber !== null && workingNote && !showCreateCorrection && (
-        <text
-          x={secondX + 30}
-          y={yForStep(workingNote.step) + 7}
-          fontSize="20"
-          fontWeight="800"
-          fill="red"
-          opacity="0.5"
-          textAnchor="middle"
-        >
-          {createHelpNumber}
-        </text>
+      {mode === "create" && !feedback && workingNote && (
+        <Note x={secondX} note={workingNote} colour={selectedIndex == null ? COLOUR.preview : "currentColor"} opacity={selectedIndex == null ? 0.55 : 1} preview={selectedIndex == null} />
+      )}
+
+      {mode === "create" && createCorrect && selectedNote && <Note x={secondX} note={selectedNote} colour={COLOUR.green} />}
+
+      {mode === "create" && createIncorrect && selectedNote && (
+        <>
+          <Note x={secondX - 34} note={selectedNote} colour={COLOUR.red} />
+          <Note x={secondX + 34} note={targetNote} colour={COLOUR.green} />
+        </>
+      )}
+
+      {mode === "create" && showHelp && !feedback && workingIndex != null && workingNote && (
+        <IntervalHelpNumbers
+          question={{ ...question, type: "create", targetIndex: workingIndex }}
+          startX={startX}
+          secondX={secondX}
+        />
+      )}
+
+      {mode === "create" && (
+        <rect
+          x={secondX - 60}
+          y={STAFF.trebleTop - 72}
+          width="120"
+          height="220"
+          fill="transparent"
+          pointerEvents="all"
+          className="touch-none"
+          style={{ touchAction: "none" }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+        />
+      )}
+
+      {touchPreview?.active && touchPreview.step != null && !feedback && mode === "create" && (
+        <g pointerEvents="none">
+          <line x1={STAFF.left - 14} x2={STAFF.right + 14} y1={yForStep(STAFF.trebleTop, touchPreview.step)} y2={yForStep(STAFF.trebleTop, touchPreview.step)} stroke="black" strokeWidth="1.5" strokeDasharray="5 5" opacity="0.55" />
+          <Note x={touchPreview.x} note={noteByIndex(indexFromStep(touchPreview.step))} colour="black" opacity={0.86} preview scale={1.65} />
+        </g>
       )}
     </svg>
   );
 }
 
-function AnswerOptions({ disabled, selectedAnswer, onSelect }) {
+function getStreakMedal(streak) {
+  if (streak >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
+  if (streak >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
+  if (streak >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
+  if (streak >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
+  return null;
+}
+
+function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
+  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
+  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
+  const fillColour = safeProgress == null
+    ? "transparent"
+    : safeProgress < 50
+      ? "rgba(220, 38, 38, 0.38)"
+      : safeProgress < 70
+        ? "rgba(255, 120, 0, 0.42)"
+        : "rgba(22, 163, 74, 0.38)";
+  const isStreak = variant === "streak";
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-7 gap-2 mb-4">
-      {INTERVALS.map((interval) => (
-        <button
-          key={interval.size}
-          type="button"
-          disabled={disabled}
-          onClick={() => onSelect(interval.size)}
-          className={`rounded-xl border px-4 py-3 font-semibold ${
-            selectedAnswer === interval.size ? "bg-stone-950 text-white border-stone-950" : "border-stone-300 hover:bg-stone-100"
-          }`}
-        >
-          {interval.label}
-        </button>
-      ))}
+    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
+      {isStreak && confettiKey > 0 && (
+        <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
+          {Array.from({ length: 18 }).map((_, index) => (
+            <span
+              key={index}
+              className="absolute block h-1.5 w-1 rounded-sm"
+              style={{
+                left: `${8 + ((index * 19) % 84)}%`,
+                top: "-8px",
+                backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
+                animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
+                animationDelay: `${(index % 6) * 0.035}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}
+
+      <div className="relative z-10 text-center">
+        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+        <div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>
+        {footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}
+      </div>
+
+      {isStreak && (
+        <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>
+          {medal?.emoji ?? "🥉"}
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value }) {
-  return (
-    <div className="rounded-xl border bg-stone-50 p-3 text-center">
-      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function Feedback({ feedback, mode, correctAnswerText }) {
+function FeedbackBanner({ feedback, fading = false, correctText = "" }) {
   if (!feedback) return null;
 
   return (
-    <div className="mt-5 flex min-h-[64px] items-center justify-center p-4">
-      <div className={`text-center font-semibold ${feedback === "correct" ? "text-green-700" : "text-red-700"}`}>
-        <p>{feedback === "correct" ? `${TICK} Correct` : `${CROSS} Incorrect`}</p>
-        {feedback === "incorrect" && mode === "identify" && <p className="mt-1 text-base font-semibold text-green-700">{correctAnswerText}</p>}
+    <div className="relative flex w-full items-center justify-center text-center">
+      <div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
+        <span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
+        {!feedback.correct && correctText && <span className="mt-1 text-sm font-semibold text-green-700">{correctText}</span>}
+        {!feedback.correct && (
+          <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">
+            <TapIcon />
+            <span>Click or tap anywhere to continue</span>
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function IntervalTrainer() {
-  const timeoutRef = useRef(null);
-  const [mode, setMode] = useState("identify");
-  const [question, setQuestion] = useState(() => makeQuestion("identify"));
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
+function TapIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
+      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
+    </svg>
+  );
+}
+
+function MenuIcon({ type }) {
+  if (type === "difficulty") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px] shrink-0 text-stone-700" aria-hidden="true">
+        <path d="M4 18h16v2H4v-2Z" />
+        <path d="M5 14h3v3H5v-3Z" />
+        <path d="M10.5 10h3v7h-3v-7Z" />
+        <path d="M16 5h3v12h-3V5Z" />
+      </svg>
+    );
+  }
+  if (type === "help") return <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[10px] font-black leading-none text-stone-700">abc</span>;
+  return null;
+}
+
+function HelpPanel() {
+  const [page, setPage] = useState(0);
+  const pages = [
+    ["Instructions", "Questions are randomly generated between Identify Interval and Create Interval depending on which modes are enabled in Customise."],
+    ["Identify Interval", "Choose the correct interval name shown between the two notes. Correct answers highlight green. Incorrect answers highlight red."],
+    ["Create Interval", "Place the second note to create the interval requested. The note updates live while hovering or dragging."],
+    ["Show Step Counter", "Enable Show Step Counter in the Customise menu to display interval counting numbers directly on the stave."],
+    ["Counting Intervals", "Always start counting from the original note. Count the starting note as 1, then count each line and space until you reach the second note."],
+    ["Direction", "If the task says higher, place the note above the starting note. If it says lower, place it below."],
+  ];
+  const [title, body] = pages[page];
+
+  return (
+    <div>
+      <h2 className="mb-3 text-center text-base font-semibold">Help</h2>
+      <div className="min-h-[120px] rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <h3 className="text-sm font-bold text-stone-800">{title}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">←</button>
+        <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
+        <button type="button" onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">→</button>
+      </div>
+    </div>
+  );
+}
+
+function AppIcon() {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="18" y="31" fontSize="60" fontFamily="serif" fill="black" textAnchor="middle" dominantBaseline="middle">{GLYPH.trebleClef}</text>
+        <ellipse cx="45" cy="19" rx="5.8" ry="4.2" transform="rotate(-18 45 19)" fill="white" stroke="black" strokeWidth="2" />
+        <line x1="39" y1="29" x2="42" y2="25" stroke="black" strokeWidth="1.8" strokeLinecap="round" />
+        <polygon points="42,25 39.6,25.7 41.4,27.4" fill="black" />
+        <ellipse cx="36" cy="34" rx="5.8" ry="4.2" transform="rotate(-18 36 34)" fill="white" stroke="black" strokeWidth="2" />
+      </svg>
+    </div>
+  );
+}
+
+function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setShowHelp, resetScore }) {
+  const rowClass = "mb-2.5 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]";
+
+  function toggleMode(modeId) {
+    setEnabledModes((current) => {
+      const next = { ...current, [modeId]: !current[modeId] };
+      const hasAtLeastOne = next.identify || next.create;
+      if (!hasAtLeastOne) return current;
+      window.setTimeout(() => newQuestion(next), 0);
+      return next;
+    });
+  }
+
+  function ToggleSwitch({ active }) {
+    return (
+      <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}>
+        <span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} />
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <button type="button" onClick={() => toggleMode("identify")} className={rowClass}>
+        <span className="flex min-w-[145px] translate-y-[1px] items-center gap-2 text-sm font-semibold">
+          <span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center leading-none">
+            <svg width="34" height="24" viewBox="0 0 34 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="10" cy="16" rx="5.2" ry="3.8" transform="rotate(-18 10 16)" fill="black" />
+              <ellipse cx="22" cy="8" rx="5.2" ry="3.8" transform="rotate(-18 22 8)" fill="black" />
+              <path d="M13.5 13.5L18.8 9.2" stroke="black" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M16.8 9.2H18.8V11.2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span>Identify Interval</span>
+        </span>
+        <ToggleSwitch active={enabledModes.identify} />
+      </button>
+
+      <button type="button" onClick={() => toggleMode("create")} className={rowClass}>
+        <span className="flex min-w-[145px] translate-y-[1px] items-center gap-2 text-sm font-semibold">
+          <span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center text-[17px] font-black leading-none">✎</span>
+          <span>Create Interval</span>
+        </span>
+        <ToggleSwitch active={enabledModes.create} />
+      </button>
+
+      <button type="button" onClick={() => setShowHelp((value) => !value)} className={rowClass}>
+        <span className="flex min-w-[145px] items-center gap-2 text-sm font-semibold"><span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center text-[10px] font-black leading-none text-stone-700">123</span><span>Show Step Counter</span></span>
+        <ToggleSwitch active={showHelp} />
+      </button>
+
+      <button type="button" onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
+    </>
+  );
+}
+
+function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, correctAnswer }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {INTERVALS.map((interval) => {
+        const isSelected = selectedAnswer === interval.size;
+        const isCorrect = correctAnswer === interval.size;
+        let buttonClass = "border-stone-300 bg-white text-stone-900";
+
+        if (feedback) {
+          if (isCorrect) {
+            buttonClass = "border-green-700 bg-green-600 text-white";
+          } else if (isSelected && !isCorrect) {
+            buttonClass = "border-red-700 bg-red-600 text-white";
+          } else {
+            buttonClass = "border-stone-300 bg-white text-stone-900 opacity-60";
+          }
+        } else if (isSelected) {
+          buttonClass = "border-stone-950 bg-stone-950 text-white";
+        }
+
+        return (
+          <button
+            key={interval.size}
+            type="button"
+            disabled={disabled}
+            onClick={() => onSelect(interval.size)}
+            className={`flex h-[48px] min-w-[68px] items-center justify-center rounded-xl border px-3 text-sm font-bold transition ${buttonClass}`}
+          >
+            {interval.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function useInjectedStyles() {
+  useEffect(() => {
+    if (document.getElementById("intervals-golden-style")) return;
+    const style = document.createElement("style");
+    style.id = "intervals-golden-style";
+    style.innerHTML = `
+      button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform 0.08s ease, filter 0.08s ease, background-color 0.12s ease, box-shadow 0.12s ease; cursor: pointer; }
+      button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+      button:active { transform: scale(0.96); filter: brightness(0.92); }
+      button:disabled { cursor: not-allowed; opacity: 0.5; }
+      button:focus-visible { outline: 2px solid rgba(22,163,74,0.35); outline-offset: 2px; }
+      @keyframes medalShine { 0%,100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } }
+      @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
+      @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
+      @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
+    `;
+    document.head.appendChild(style);
+  }, []);
+}
+
+function useClickOutside(refs, handlers) {
+  useEffect(() => {
+    function onPointerDown(event) {
+      refs.forEach((ref, index) => {
+        if (!ref.current?.contains(event.target)) handlers[index]?.();
+      });
+    }
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [refs, handlers]);
+}
+
+function App() {
+  useInjectedStyles();
+
+  const initialQuestionMode = useMemo(() => pickQuestionMode({ identify: true, create: true }), []);
+  const [enabledModes, setEnabledModes] = useState({ identify: true, create: true });
+  const [mode, setMode] = useState(initialQuestionMode);
+  const [question, setQuestion] = useState(() => createQuestion(initialQuestionMode));
+  const [questionVisible, setQuestionVisible] = useState(true);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [hoverIndex, setHoverIndex] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [touchPreview, setTouchPreview] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [feedbackFading, setFeedbackFading] = useState(false);
+  const [prompt, setPrompt] = useState("");
   const [correct, setCorrect] = useState(0);
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
+  const [confettiKey, setConfettiKey] = useState(0);
+
+  const customiseRef = useRef(null);
+  const helpRef = useRef(null);
+
+  useClickOutside(
+    [customiseRef, helpRef],
+    [() => customiseOpen && setCustomiseOpen(false), () => helpOpen && setHelpOpen(false)],
+  );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const canConfirm = mode === "create" ? selectedIndex != null && !feedback : false;
+  const streakMedal = getStreakMedal(streak);
 
-  const promptText = useMemo(() => {
-    if (mode === "identify") return "Identify the interval shown.";
+  const instruction = mode === "identify"
+    ? <>Describe the interval formed by the two notes shown.</>
+    : <>Create an interval <strong>{intervalLabel(question.intervalSize).toLowerCase()}</strong> <strong>{question.direction}</strong> than the note given.</>;
 
-    const label = intervalLabel(question.intervalSize).toLowerCase();
-    const article = label === "octave" ? "an" : "a";
+  const correctAnswerText = "";
 
-    return (
-      <>
-        Create an interval {article} <strong>{label}</strong> <strong>{question.direction}</strong> than the note given.
-      </>
-    );
-  }, [mode, question]);
-
-  const correctAnswerText = mode === "identify" ? intervalLabel(question.intervalSize) : noteByIndex(question.targetIndex).name;
-
-  function clearTimer() {
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  }
-
-  function nextQuestion(nextMode = mode) {
-    clearTimer();
-    setQuestion(makeQuestion(nextMode));
-    setSelectedAnswer(null);
+  function resetTask(nextQuestion = question) {
+    setQuestion(nextQuestion);
     setHoverIndex(null);
     setSelectedIndex(null);
-    setFeedback(null);
-  }
-
-  function recordAnswer(isCorrect, answerValue = null) {
-    const newStreak = isCorrect ? streak + 1 : 0;
-
-    setAttempted((value) => value + 1);
-    setCorrect((value) => value + (isCorrect ? 1 : 0));
-    setStreak(newStreak);
-    setBestStreak((value) => Math.max(value, newStreak));
-    setFeedback(isCorrect ? "correct" : "incorrect");
-
-    if (answerValue !== null) setSelectedAnswer(answerValue);
-
-    clearTimer();
-    timeoutRef.current = window.setTimeout(() => nextQuestion(), 2000);
-  }
-
-  function selectInterval(intervalSize) {
-    if (feedback || mode !== "identify") return;
-    recordAnswer(intervalSize === question.intervalSize, intervalSize);
-  }
-
-  function confirmCreatedInterval() {
-    if (feedback || mode !== "create" || selectedIndex === null) return;
-    recordAnswer(selectedIndex === question.targetIndex);
-  }
-
-  function moveSelected(direction) {
-    if (feedback || mode !== "create") return;
-
-    const current = selectedIndex ?? hoverIndex ?? question.startIndex;
-    const next = Math.max(0, Math.min(NOTES.length - 1, current + direction));
-    setSelectedIndex(next);
-    setHoverIndex(next);
-  }
-
-  function changeMode(nextMode) {
-    clearTimer();
-    setMode(nextMode);
-    setQuestion(makeQuestion(nextMode));
     setSelectedAnswer(null);
-    setHoverIndex(null);
-    setSelectedIndex(null);
+    setTouchPreview(null);
     setFeedback(null);
+    setFeedbackFading(false);
+    setPrompt("");
+  }
+
+  function newQuestion(nextEnabledModes = enabledModes) {
+    setQuestionVisible(false);
+    window.setTimeout(() => {
+      const nextMode = pickQuestionMode(nextEnabledModes);
+      setMode(nextMode);
+      resetTask(createQuestion(nextMode));
+      setQuestionVisible(true);
+    }, 260);
   }
 
   function resetScore() {
@@ -430,125 +748,219 @@ function IntervalTrainer() {
     setAttempted(0);
     setStreak(0);
     setBestStreak(0);
-    nextQuestion();
+    setConfettiKey(0);
+    newQuestion(enabledModes);
+  }
+
+  function fadeToNextQuestion() {
+    if (!feedback || feedback.correct || feedbackFading) return;
+    setFeedbackFading(true);
+    window.setTimeout(() => newQuestion(mode), 280);
+  }
+
+  function scoreAnswer(isCorrect) {
+    const nextStreak = isCorrect ? streak + 1 : 0;
+    playFeedbackSound(isCorrect);
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(nextStreak);
+    setBestStreak((value) => Math.max(value, nextStreak));
+    setFeedback({ correct: isCorrect });
+
+    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+      const medal = getStreakMedal(nextStreak);
+      setConfettiKey((value) => value + 1);
+      window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
+    }
+
+    if (isCorrect) {
+      setFeedbackFading(false);
+      window.setTimeout(() => setFeedbackFading(true), 1700);
+      window.setTimeout(() => newQuestion(mode), 2000);
+    }
+  }
+
+  function selectInterval(intervalSize) {
+    if (feedback || mode !== "identify") return;
+    setSelectedAnswer(intervalSize);
+    scoreAnswer(intervalSize === question.intervalSize);
+  }
+
+  function confirmAnswer() {
+    if (feedback || mode !== "create") return;
+    if (selectedIndex == null) {
+      setPrompt("Place the second note first.");
+      return;
+    }
+    scoreAnswer(selectedIndex === question.targetIndex);
+  }
+
+  function pointerToSvg(event) {
+    const svg = event.currentTarget.ownerSVGElement;
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * SVG.width,
+      y: ((event.clientY - rect.top) / rect.height) * SVG.height,
+    };
+  }
+
+  function getPointerIndex(event) {
+    const pointer = pointerToSvg(event);
+    const touchOffset = event.pointerType === "touch" ? 44 : 0;
+    const step = stepFromSvgY(pointer.y - touchOffset, STAFF.trebleTop);
+    const index = indexFromStep(step);
+    return { pointer, step, index: index === -1 ? null : index };
+  }
+
+  function handlePointerMove(event) {
+    if (feedback || mode !== "create") return;
+    const { pointer, step, index } = getPointerIndex(event);
+    if (index == null) return;
+    setHoverIndex(index);
+
+    if (touchPreview?.active) {
+      setTouchPreview((current) => ({ ...(current ?? {}), active: true, x: pointer.x, y: pointer.y, step, index, dragged: true }));
+    }
+  }
+
+  function handlePointerDown(event) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    if (feedback && !feedback.correct) {
+      fadeToNextQuestion();
+      return;
+    }
+
+    if (mode !== "create") return;
+    const { pointer, step, index } = getPointerIndex(event);
+    if (index == null) return;
+    setHoverIndex(index);
+    setTouchPreview({ active: true, x: pointer.x, y: pointer.y, step, index, dragged: false });
+  }
+
+  function handlePointerUp(event) {
+    if (feedback || mode !== "create") return;
+    event.preventDefault();
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+    if (touchPreview?.index != null) {
+      setSelectedIndex(touchPreview.index);
+      setHoverIndex(touchPreview.index);
+      setPrompt("");
+    }
+
+    setTouchPreview(null);
+  }
+
+  function handlePointerCancel() {
+    setTouchPreview(null);
+  }
+
+  function moveSelected(direction) {
+    if (feedback || mode !== "create") return;
+    const current = selectedIndex ?? hoverIndex ?? question.startIndex;
+    const next = clamp(current + direction, 0, NOTES.length - 1);
+    setSelectedIndex(next);
+    setHoverIndex(next);
+    setPrompt("");
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Intervals</h1>
-              <p className="mt-2 text-stone-700">Identify and create intervals.</p>
+    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <AppIcon />
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Intervals</h1>
+                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Naming and creating diatonic intervals: 2nd, 3rd, 4th, 5th, 6th, 7th, octave.</p>
+              </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 min-w-[280px]">
-              <StatCard label="Score" value={`${correct}/${attempted}`} />
-              <StatCard label="Accuracy" value={`${accuracy}%`} />
-              <StatCard label="Streak" value={streak} />
+            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
+              <StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
+              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal?.bg ?? "bg-stone-50"}`}>
+                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal} confettiKey={confettiKey} />
+                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
+                  <div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">30</span></div>
+                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
+                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
+                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
+                </div>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
-          <div className="mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-            <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => changeMode("identify")}
-                className={`rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "identify" ? "bg-stone-950 text-white border-stone-950" : "bg-white border-stone-300 hover:bg-stone-100"}`}
-              >
-                Identify the Interval
-              </button>
-
-              <button
-                type="button"
-                onClick={() => changeMode("create")}
-                className={`rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "create" ? "bg-stone-950 text-white border-stone-950" : "bg-white border-stone-300 hover:bg-stone-100"}`}
-              >
-                Create the Interval
-              </button>
-            </div>
-
+        <main className="relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
+          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                title="Help"
-                aria-label="Help"
-                onClick={() => setShowHelp((value) => !value)}
-                className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}
-              >
-                ?
-              </button>
+              <div className="relative" ref={customiseRef}>
+                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
+                {customiseOpen && (
+                  <div className="absolute left-0 z-20 mt-2 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
+                    <MenuRows enabledModes={enabledModes} setEnabledModes={setEnabledModes} newQuestion={newQuestion} showHelp={showHelp} setShowHelp={setShowHelp} resetScore={resetScore} />
+                  </div>
+                )}
+              </div>
 
-              <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">
-                Reset score
-              </button>
+              <div className="relative" ref={helpRef}>
+                <button type="button" onClick={() => setHelpOpen((value) => !value)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>
+                {helpOpen && (
+                  <div className="absolute left-0 top-12 z-20 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+                    <HelpPanel />
+                  </div>
+                )}
+              </div>
             </div>
+
+            <button type="button" onClick={() => newQuestion(mode)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} correctText={correctAnswerText} /></div>
           </div>
 
-          <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4 font-semibold text-stone-800">{promptText}</div>
-
-          {mode === "identify" && <AnswerOptions disabled={Boolean(feedback)} selectedAnswer={selectedAnswer} onSelect={selectInterval} />}
-
-          <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white">
-            {mode === "create" && (
-              <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2">
-                <button
-                  type="button"
-                  disabled={Boolean(feedback)}
-                  onClick={() => moveSelected(1)}
-                  className="h-11 w-11 rounded-full border border-stone-300 bg-white text-xl font-bold shadow hover:bg-stone-100 disabled:opacity-40"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(feedback)}
-                  onClick={() => moveSelected(-1)}
-                  className="h-11 w-11 rounded-full border border-stone-300 bg-white text-xl font-bold shadow hover:bg-stone-100 disabled:opacity-40"
-                >
-                  ↓
-                </button>
-              </div>
-            )}
-
-            <IntervalNotation
+          <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+            <ScoreArea
               question={question}
               mode={mode}
+              showHelp={showHelp}
               hoverIndex={hoverIndex}
               selectedIndex={selectedIndex}
-              onHoverIndex={setHoverIndex}
-              onSelectIndex={setSelectedIndex}
+              selectedAnswer={selectedAnswer}
               feedback={feedback}
-              showHelp={showHelp}
+              touchPreview={touchPreview}
+              onPointerMove={handlePointerMove}
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
             />
           </div>
 
-          {mode === "create" && (
-            <div className="mt-4 flex justify-center">
-              <button
-                type="button"
-                disabled={Boolean(feedback) || selectedIndex === null}
-                onClick={confirmCreatedInterval}
-                className="rounded-xl bg-stone-950 px-8 py-3 font-semibold text-white disabled:opacity-40"
-              >
-                Confirm
-              </button>
+
+
+          <div className="relative z-10 mt-3 h-[112px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[168px] md:mx-3">
+            <div className="space-y-3 text-stone-900">
+              <p className="text-base font-semibold leading-tight">{instruction}</p>
+              {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
             </div>
-          )}
 
-          <Feedback feedback={feedback} mode={mode} correctAnswerText={correctAnswerText} />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pb-[0px]">
+              {mode === "identify" && <IntervalOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectInterval} feedback={feedback} correctAnswer={question.intervalSize} />}
 
-          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+              <div className="absolute bottom-4 right-4 flex shrink-0 justify-end gap-2">
+                {mode === "create" && <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>}
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<IntervalTrainer />);
-</script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
 </body>
 </html>
