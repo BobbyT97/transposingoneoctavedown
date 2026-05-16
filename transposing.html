@@ -20,8 +20,8 @@ const SVG = { width: 920, height: 420 };
 const STAFF = {
   left: 222,
   right: 714,
-  trebleTop: 62,
-  bassTop: 239,
+  trebleTop: 72,
+  bassTop: 229,
   gap: 21,
 };
 
@@ -411,7 +411,7 @@ function Staff({ top, clef }) {
       ))}
       <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
       <text
-        x={STAFF.left + (isTreble ? 18 : 19)}
+        x={STAFF.left + (isTreble ? 18 : 8)}
         y={top + (isTreble ? 58 : 48)}
         fontSize={isTreble ? 189 : 119}
         fontFamily="serif"
@@ -482,7 +482,7 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
 
         const secondStep = second.step ?? first.step;
         const result = feedbackDetails?.[index]?.tieCorrect;
-        if (feedbackDetails && result === true) return null;
+        if (correctOverlay && feedbackDetails && result === true) return null;
 
         const colour = result == null ? "currentColor" : result ? COLOUR.green : COLOUR.red;
         const errorOffset = result === false ? -3 : 0;
@@ -1368,7 +1368,7 @@ function App() {
             <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} /></div>
           </div>
 
-          <div className={`relative -top-[35px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+          <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
             <ScoreArea
               question={question}
               mode={mode}
@@ -1390,7 +1390,7 @@ function App() {
             />
           </div>
 
-          <div className="relative z-10 mt-3 h-[143px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[98px] md:mx-3">
+          <div className="relative z-10 mt-3 h-[143px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[123px] md:mx-3">
             <div className="space-y-3 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
